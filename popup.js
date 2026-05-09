@@ -52,6 +52,7 @@ function buildUnmatchedItem(item) {
 
   const top = document.createElement('div');
   top.className = 'unmatched-top';
+  // eslint-disable-next-line no-unsanitized/property -- hint and label escaped via escapeHtml
   top.innerHTML = `
     <span class="field-tag tag-other">${escapeHtml(translateManualHint(item.hint))}</span>
     <div class="field-info"><div class="field-label">${escapeHtml(item.label)}</div></div>
@@ -220,6 +221,7 @@ function renderManual(items) {
 
     const div = document.createElement('div');
     div.className = 'manual-item';
+    // eslint-disable-next-line no-unsanitized/property -- tagClass from internal map; hint/label/valueHtml all escaped via escapeHtml
     div.innerHTML = `
       <span class="field-tag ${tagClass}">${escapeHtml(hintText)}</span>
       <div class="field-info">

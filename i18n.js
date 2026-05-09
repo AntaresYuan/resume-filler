@@ -396,6 +396,7 @@ const ResumeFillerI18n = (() => {
     });
 
     root.querySelectorAll('[data-i18n-html]').forEach((node) => {
+      // eslint-disable-next-line no-unsanitized/property -- value comes from developer-controlled i18n dictionary keyed by data-i18n-html
       node.innerHTML = getMessage(currentLang, node.dataset.i18nHtml);
     });
 
@@ -424,12 +425,12 @@ const ResumeFillerI18n = (() => {
         chrome.storage.local.set({ [STORAGE_KEY]: lang });
         return;
       }
-    } catch (error) {
+    } catch {
       // ignore
     }
     try {
       localStorage.setItem(STORAGE_KEY, lang);
-    } catch (error) {
+    } catch {
       // ignore
     }
   }
@@ -443,13 +444,13 @@ const ResumeFillerI18n = (() => {
           });
           return;
         }
-      } catch (error) {
+      } catch {
         // ignore
       }
 
       try {
         resolve(localStorage.getItem(STORAGE_KEY) || 'zh');
-      } catch (error) {
+      } catch {
         resolve('zh');
       }
     });
