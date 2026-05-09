@@ -459,7 +459,120 @@ I18N.init().then(() => {
     hydrate();
     renderCustomFields(customFields || {});
   });
+  initAiSettings();
 });
+
+// ─── AI settings (issue #8) ─────────────────────────────────────────────
+const LP = window.ResumeFillerLLMProviders;
+
+function initAiSettings() {
+  if (!LP) return;
+  const sel = document.getElementById('ai-provider');
+  if (!sel) return;
+  sel.innerHTML = '';
+  LP.listProviders().forEach((p) => {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.name;
+    sel.appendChild(opt);
+  });
+  loadAiSettings();
+  sel.addEventListener('change', () => updateAiPlaceholders());
+  document.getElementById('ai-show-key').addEventListener('click', toggleKeyVisibility);
+  document.getElementById('ai-test-btn').addEventListener('click', testAiKey);
+  document.getElementById('ai-save-btn').addEventListener('click', saveAiSettings);
+}
+
+function loadAiSettings() {
+  chrome.storage.local.get('aiSettings', ({ aiSettings }) => {
+    const settings = aiSettings || LP.defaultSettings();
+    document.getElementById('ai-enabled').checked = !!settings.enabled;
+    document.getElementById('ai-provider').value = settings.provider || 'openai';
+    document.getElementById('ai-endpoint').value = settings.endpoint || '';
+    document.getElementById('ai-model').value = settings.model || '';
+    document.getElementById('ai-api-key').value = LP.decodeKey(settings.apiKey || '');
+    updateAiPlaceholders();
+  });
+}
+
+function updateAiPlaceholders() {
+  const provider = LP.getProvider(document.getElementById('ai-provider').value);
+  if (!provider) return;
+  document.getElementById('ai-endpoint').placeholder =
+    provider.defaultEndpoint || I18N.t('options.ai.endpoint_placeholder');
+  document.getElementById('ai-model').placeholder =
+    provider.defaultModel || I18N.t('options.ai.model_placeholder');
+}
+
+function toggleKeyVisibility() {
+  const input = document.getElementById('ai-api-key');
+  const btn = document.getElementById('ai-show-key');
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.textContent = I18N.t('options.ai.hide_key');
+  } else {
+    input.type = 'password';
+    btn.textContent = I18N.t('options.ai.show_key');
+  }
+}
+
+function readAiFormSettings() {
+  return {
+    enabled: document.getElementById('ai-enabled').checked,
+    provider: document.getElementById('ai-provider').value,
+    endpoint: document.getElementById('ai-endpoint').value.trim(),
+    model: document.getElementById('ai-model').value.trim(),
+    apiKey: LP.encodeKey(document.getElementById('ai-api-key').value),
+  };
+}
+
+function saveAiSettings() {
+  const settings = readAiFormSettings();
+  chrome.storage.local.set({ aiSettings: settings }, () => {
+    setAiStatus(I18N.t('options.ai.saved'), 'success');
+  });
+}
+
+function setAiStatus(text, kind) {
+  const el = document.getElementById('ai-test-status');
+  el.textContent = text;
+  el.style.color = kind === 'success' ? '#3b8a5d' : kind === 'error' ? '#b54141' : '#7d8194';
+}
+
+async function testAiKey() {
+  setAiStatus(I18N.t('options.ai.testing'), 'info');
+  const settings = readAiFormSettings();
+  const reasons = LP.validateSettings(settings);
+  if (reasons.length > 0) {
+    setAiStatus(I18N.t('options.ai.test_invalid', { reason: reasons.join(', ') }), 'error');
+    return;
+  }
+  let req;
+  try {
+    req = LP.buildTestRequest(settings);
+  } catch (err) {
+    setAiStatus(I18N.t('options.ai.test_invalid', { reason: err.message }), 'error');
+    return;
+  }
+  try {
+    const res = await fetch(req.url, {
+      method: req.method,
+      headers: req.headers,
+      body: req.body,
+    });
+    if (res.ok || res.status === 400) {
+      // 400 from a "ping" body is acceptable: we only care that the API
+      // accepted the auth header (a 401 would mean bad key).
+      setAiStatus(I18N.t('options.ai.test_ok'), 'success');
+    } else if (res.status === 401 || res.status === 403) {
+      setAiStatus(I18N.t('options.ai.test_unauth'), 'error');
+    } else {
+      setAiStatus(I18N.t('options.ai.test_failed', { status: res.status }), 'error');
+    }
+  } catch (err) {
+    setAiStatus(I18N.t('options.ai.test_network', { message: err.message }), 'error');
+  }
+}
 
 function escapeHtml(str) {
   return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
