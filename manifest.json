@@ -21,7 +21,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["schema.js", "lib/field-detect.js", "lib/value-match.js", "content.js"],
+      "js": ["schema.js", "lib/field-detect.js", "lib/value-match.js", "lib/cross-lingual.js", "content.js"],
       "run_at": "document_idle"
     }
   ],

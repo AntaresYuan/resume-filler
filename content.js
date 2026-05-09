@@ -4,10 +4,13 @@
 
 // Field detection (FIELD_MAP, normalize*, getFieldLabel, matchResumeKey)
 // lives in lib/field-detect.js. Value-to-option matching (abbreviations,
-// synonyms, ranges) lives in lib/value-match.js.
+// synonyms, ranges) lives in lib/value-match.js. Bilingual translation
+// (Chinese ↔ English schools / companies / degrees / names) lives in
+// lib/cross-lingual.js.
 const FD = window.ResumeFillerFieldDetect;
 const { normalize, getFieldLabel, matchResumeKey } = FD;
 const VM = window.ResumeFillerValueMatch;
+const CL = window.ResumeFillerCrossLingual;
 
 const MULTI_ENTRY_SECTIONS = [
   {
@@ -427,7 +430,8 @@ function fillInputBatch(inputs, flat, filled, manual, skipSet) {
     const match = matchResumeKey(el);
     const key = match && match.key;
     if (key && flat[key]) {
-      fillField(el, flat[key]);
+      const value = CL.maybeTranslate(key, flat[key], getFieldLabel(el));
+      fillField(el, value);
       filled.push(key);
     } else {
       const label = getFieldLabel(el);
@@ -605,12 +609,15 @@ async function handleFill(resumeData, customFields) {
 
     const match = matchResumeKey(el);
     const key = match && match.key;
-    if (key && flat[key] && tryFillSelect(el, flat[key])) {
-      filled.push(key);
-    } else {
-      const hint = key ? flat[key] || '—' : '—';
-      manual.push({ label: String(label).trim(), hint: '下拉框', value: hint });
+    if (key && flat[key]) {
+      const value = CL.maybeTranslate(key, flat[key], label);
+      if (tryFillSelect(el, value)) {
+        filled.push(key);
+        continue;
+      }
     }
+    const hint = key ? flat[key] || '—' : '—';
+    manual.push({ label: String(label).trim(), hint: '下拉框', value: hint });
   }
 
   // Phase 3：combobox / 自定义下拉
@@ -622,7 +629,8 @@ async function handleFill(resumeData, customFields) {
     const match = matchResumeKey(el);
     const key = match && match.key;
     if (key && flat[key]) {
-      const ok = await tryFillCombobox(el, flat[key]);
+      const value = CL.maybeTranslate(key, flat[key], getFieldLabel(el));
+      const ok = await tryFillCombobox(el, value);
       if (ok) filled.push(key);
     }
   }
