@@ -656,25 +656,48 @@ async function handleFill(resumeData, customFields, opts) {
     : null;
   if (resume) await fillAllSectionDates(resume, filled);
 
-  // Phase 7：用户学习到的自定义字段（label → value 精确匹配）
-  if (customFields && typeof customFields === 'object') {
-    // 把所有板块的条目打平成 { label: value }
-    const allCustom = Object.values(customFields).reduce(
+  // Phase 7：user-learned custom fields and label→resumeKey mappings.
+  // customFields: { section: { label: literalValue } } — value is fixed.
+  // labelMappings: { label: resumeKey } — value comes from the current
+  // resume so it stays in sync as the user updates fields.
+  const labelMappings = await new Promise((resolve) => {
+    try {
+      chrome.storage.local.get('labelMappings', (res) => resolve(res?.labelMappings || {}));
+    } catch {
+      resolve({});
+    }
+  });
+  const allCustom = customFields && typeof customFields === 'object'
+    ? Object.values(customFields).reduce(
       (acc, section) => (typeof section === 'object' ? Object.assign(acc, section) : acc),
       {}
-    );
-    const customEntries = Object.entries(allCustom);
-    if (customEntries.length > 0) {
-      for (const el of getVisibleInputs()) {
-        const label = getFieldLabel(el);
-        if (!label) continue;
-        const norm = normalize(label);
-        for (const [cfLabel, cfValue] of customEntries) {
-          if (normalize(cfLabel) === norm && cfValue) {
-            fillField(el, String(cfValue));
-            filled.push('custom:' + cfLabel);
-            break;
-          }
+    )
+    : {};
+  const customEntries = Object.entries(allCustom);
+  const mappingEntries = Object.entries(labelMappings);
+  if (customEntries.length > 0 || mappingEntries.length > 0) {
+    for (const el of getVisibleInputs()) {
+      const label = getFieldLabel(el);
+      if (!label) continue;
+      const norm = normalize(label);
+
+      let matched = false;
+      // Literal-value custom fields take priority — most explicit.
+      for (const [cfLabel, cfValue] of customEntries) {
+        if (normalize(cfLabel) === norm && cfValue) {
+          fillField(el, String(cfValue));
+          filled.push('custom:' + cfLabel);
+          matched = true;
+          break;
+        }
+      }
+      if (matched) continue;
+      // Then label→resumeKey mappings (#10): fill from current resume.
+      for (const [lmLabel, lmKey] of mappingEntries) {
+        if (normalize(lmLabel) === norm && flat[lmKey]) {
+          fillField(el, String(flat[lmKey]));
+          filled.push('mapped:' + lmLabel);
+          break;
         }
       }
     }

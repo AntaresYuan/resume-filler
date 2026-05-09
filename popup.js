@@ -1,4 +1,9 @@
 const I18N = window.ResumeFillerI18n;
+const LC = window.ResumeFillerLabelClassifier;
+
+// Cached after the most recent fill so the AI takeover button can re-issue
+// the same fill with aiTakeover: true (no new user click needed).
+let lastFillManual = [];
 
 // ─── 未匹配字段 → 板块映射（新增，不覆盖现有内容）────────────────────────────
 
@@ -59,6 +64,7 @@ function buildUnmatchedItem(item) {
   `;
   div.appendChild(top);
 
+  // Form: input + section dropdown + Save Value button.
   const form = document.createElement('div');
   form.className = 'unmatched-form';
 
@@ -75,6 +81,12 @@ function buildUnmatchedItem(item) {
     option.textContent = opt.label;
     select.appendChild(option);
   });
+  // Pre-select the inferred section so users only need to retarget
+  // when the heuristic guesses wrong.
+  const inferred = LC.inferSection(item.label);
+  if (inferred && Array.from(select.options).some((o) => o.value === inferred)) {
+    select.value = inferred;
+  }
 
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -95,7 +107,119 @@ function buildUnmatchedItem(item) {
   form.appendChild(select);
   form.appendChild(btn);
   div.appendChild(form);
+
+  // Action row: Skip | Map to resume field
+  const actions = document.createElement('div');
+  actions.className = 'unmatched-actions';
+
+  const skipBtn = document.createElement('button');
+  skipBtn.type = 'button';
+  skipBtn.className = 'action-link danger';
+  skipBtn.textContent = I18N.t('popup.unmatched_skip');
+  skipBtn.addEventListener('click', () => collapseAndRemove(div));
+
+  const mapWrap = document.createElement('span');
+  mapWrap.style.display = 'inline-flex';
+  mapWrap.style.gap = '6px';
+  mapWrap.style.alignItems = 'center';
+  mapWrap.style.marginLeft = 'auto';
+
+  const mapHint = document.createElement('span');
+  mapHint.style.fontSize = '11px';
+  mapHint.style.color = '#7a8093';
+  mapHint.textContent = I18N.t('popup.unmatched_map_label');
+
+  const mapSelect = document.createElement('select');
+  mapSelect.className = 'unmatched-select';
+  const placeholderOpt = document.createElement('option');
+  placeholderOpt.value = '';
+  placeholderOpt.textContent = I18N.t('popup.unmatched_map_choose');
+  mapSelect.appendChild(placeholderOpt);
+  LC.RESUME_KEY_OPTIONS.forEach((opt) => {
+    const option = document.createElement('option');
+    option.value = opt.key;
+    option.textContent = (I18N.getLanguage() === 'en' ? opt.labelEn : opt.labelZh) +
+      '  (' + opt.key + ')';
+    mapSelect.appendChild(option);
+  });
+  mapSelect.addEventListener('change', () => {
+    const target = mapSelect.value;
+    if (!target) return;
+    saveLabelMapping(item.label, target, () => collapseAndRemove(div));
+  });
+
+  mapWrap.appendChild(mapHint);
+  mapWrap.appendChild(mapSelect);
+
+  actions.appendChild(skipBtn);
+  actions.appendChild(mapWrap);
+  div.appendChild(actions);
+
   return div;
+}
+
+function saveLabelMapping(label, resumeKey, done) {
+  chrome.storage.local.get('labelMappings', ({ labelMappings }) => {
+    const lm = labelMappings || {};
+    lm[label] = resumeKey;
+    chrome.storage.local.set({ labelMappings: lm }, () => {
+      if (typeof done === 'function') done();
+    });
+  });
+}
+
+function collapseAndRemove(cardEl) {
+  if (!cardEl) return;
+  cardEl.style.transition = 'opacity 0.18s ease';
+  cardEl.style.opacity = '0';
+  setTimeout(() => cardEl.remove(), 180);
+}
+
+function refreshAiTakeoverBanner() {
+  const banner = document.getElementById('aiTakeoverBanner');
+  if (!banner) return;
+  chrome.storage.local.get('aiSettings', ({ aiSettings }) => {
+    const enabled = aiSettings && aiSettings.enabled && aiSettings.apiKey;
+    banner.style.display = enabled ? 'flex' : 'none';
+  });
+}
+
+async function handleAiTakeover() {
+  const btn = document.getElementById('aiTakeoverBtn');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = I18N.t('popup.ai_takeover_running');
+
+  chrome.storage.local.get(['resume', 'customFields'], ({ resume, customFields }) => {
+    if (!resume) {
+      btn.disabled = false;
+      btn.textContent = originalText;
+      showStatus('warn', I18N.t('popup.status_no_resume'));
+      return;
+    }
+    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+      chrome.tabs.sendMessage(
+        tab.id,
+        { action: 'fill', resume, customFields: customFields || {}, aiTakeover: true },
+        (response) => {
+          btn.disabled = false;
+          btn.textContent = originalText;
+          if (chrome.runtime.lastError || !response) {
+            showStatus('warn', I18N.t('popup.status_connect_error'));
+            return;
+          }
+          const { filled, manual } = response;
+          const aiCount = (filled || []).filter((s) => typeof s === 'string' && s.startsWith('ai:')).length;
+          if (aiCount > 0) {
+            showStatus('success', I18N.t('popup.ai_takeover_done', { count: aiCount }));
+          } else {
+            showStatus('warn', I18N.t('popup.ai_takeover_empty'));
+          }
+          renderManual(manual || []);
+        }
+      );
+    });
+  });
 }
 
 const screens = {
@@ -194,6 +318,8 @@ function renderManual(items) {
     return true;
   });
 
+  lastFillManual = unique;
+
   if (unique.length === 0) {
     section.style.display = 'none';
     return;
@@ -201,36 +327,58 @@ function renderManual(items) {
 
   section.style.display = 'block';
   list.innerHTML = '';
+  refreshAiTakeoverBanner();
 
-  unique.forEach((item) => {
-    if (item.hint === '未匹配') {
-      list.appendChild(buildUnmatchedItem(item));
-      return;
+  const groups = LC.groupBySection(unique);
+  for (const group of groups) {
+    const groupEl = document.createElement('div');
+    groupEl.className = 'manual-group';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'manual-group-title';
+    titleEl.textContent = sectionDisplayName(group.section);
+    groupEl.appendChild(titleEl);
+
+    for (const item of group.items) {
+      if (item.hint === '未匹配') {
+        groupEl.appendChild(buildUnmatchedItem(item));
+      } else {
+        groupEl.appendChild(buildHintedItem(item));
+      }
     }
+    list.appendChild(groupEl);
+  }
+}
 
-    const tagClass = {
-      '日期': 'tag-date',
-      '下拉框': 'tag-select',
-      '富文本': 'tag-rich',
-    }[item.hint] || 'tag-other';
+function sectionDisplayName(section) {
+  const key = 'popup.section.' + section;
+  const translated = I18N.t(key);
+  // Fall back to the raw section id if the key isn't in the dictionary
+  // (lets new sections render without crashing the page).
+  return translated && translated !== key ? translated : section;
+}
 
-    const hintText = translateManualHint(item.hint);
-    const valueHtml = item.value
-      ? `<div class="field-value">${escapeHtml(I18N.t('popup.manual_value', { value: item.value }))}</div>`
-      : '';
-
-    const div = document.createElement('div');
-    div.className = 'manual-item';
-    // eslint-disable-next-line no-unsanitized/property -- tagClass from internal map; hint/label/valueHtml all escaped via escapeHtml
-    div.innerHTML = `
-      <span class="field-tag ${tagClass}">${escapeHtml(hintText)}</span>
-      <div class="field-info">
-        <div class="field-label">${escapeHtml(item.label)}</div>
-        ${valueHtml}
-      </div>
-    `;
-    list.appendChild(div);
-  });
+function buildHintedItem(item) {
+  const tagClass = {
+    '日期': 'tag-date',
+    '下拉框': 'tag-select',
+    '富文本': 'tag-rich',
+  }[item.hint] || 'tag-other';
+  const hintText = translateManualHint(item.hint);
+  const valueHtml = item.value
+    ? `<div class="field-value">${escapeHtml(I18N.t('popup.manual_value', { value: item.value }))}</div>`
+    : '';
+  const div = document.createElement('div');
+  div.className = 'manual-item';
+  // eslint-disable-next-line no-unsanitized/property -- tagClass from internal map; hint/label/valueHtml all escaped via escapeHtml
+  div.innerHTML = `
+    <span class="field-tag ${tagClass}">${escapeHtml(hintText)}</span>
+    <div class="field-info">
+      <div class="field-label">${escapeHtml(item.label)}</div>
+      ${valueHtml}
+    </div>
+  `;
+  return div;
 }
 
 function translateManualHint(hint) {
@@ -375,6 +523,8 @@ document.getElementById('fillBtn').addEventListener('click', () => {
   });
 });
 
+document.getElementById('aiTakeoverBtn').addEventListener('click', handleAiTakeover);
+
 window.addEventListener('resumefiller:languagechange', () => {
   setPromptText();
   updateStep1State();
@@ -382,6 +532,7 @@ window.addEventListener('resumefiller:languagechange', () => {
   if (!fillBtn.disabled) {
     fillBtn.textContent = defaultFillButtonText();
   }
+  if (lastFillManual.length > 0) renderManual(lastFillManual);
 });
 
 I18N.init().then(() => {
