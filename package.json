@@ -11,7 +11,7 @@
   },
   "jest": {
     "testEnvironment": "jsdom",
-    "testMatch": ["<rootDir>/__tests__/**/*.test.js"]
+    "testMatch": ["<rootDir>/tests/**/*.test.js"]
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
