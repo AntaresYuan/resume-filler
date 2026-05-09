@@ -32,6 +32,12 @@ module.exports = [
         ...globals.jest,
         ...globals.node
       }
+    },
+    // Test fixtures intentionally set innerHTML from string literals; the
+    // value is never user-controlled, so the security rule is noise here.
+    rules: {
+      "no-unsanitized/property": "off",
+      "no-unsanitized/method": "off"
     }
   },
   {
