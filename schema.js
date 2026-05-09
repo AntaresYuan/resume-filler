@@ -4,11 +4,13 @@
 (function (global) {
   // 空白模板（也就是发给 LLM 的目标 JSON 结构）
   const RESUME_SCHEMA = {
-    version: 1,
+    version: 2,
     basic: {
       name: "",
       firstName: "",
       lastName: "",
+      englishName: "",
+      chineseName: "",
       email: "",
       phone: "",
       wechat: "",
@@ -94,6 +96,77 @@
     return clone;
   }
 
+  // ── Versioned migrations ────────────────────────────────────────────────
+  // Migrations bring stored resume data forward to RESUME_SCHEMA.version
+  // so existing users survive schema changes between extension releases.
+  // Each migration mutates and returns the data; failures fall back to
+  // the original (we never lose user data).
+
+  function hasCJK(str) {
+    return /[一-鿿]/.test(str);
+  }
+
+  function hasLatin(str) {
+    return /[a-zA-Z]/.test(str);
+  }
+
+  // v1 → v2: introduces basic.englishName and basic.chineseName.
+  // Backfills them from basic.name when they're empty:
+  //   - pure CJK   → chineseName = name
+  //   - pure Latin → englishName = name
+  //   - mixed      → split into CJK / Latin runs
+  // basic.name is preserved so any code still reading it keeps working.
+  function migrateV1ToV2(data) {
+    data.basic = data.basic || {};
+    if (typeof data.basic.englishName !== "string") data.basic.englishName = "";
+    if (typeof data.basic.chineseName !== "string") data.basic.chineseName = "";
+
+    const name = (data.basic.name || "").trim();
+    if (name && !data.basic.englishName && !data.basic.chineseName) {
+      const cjk = hasCJK(name);
+      const latin = hasLatin(name);
+      if (cjk && !latin) {
+        data.basic.chineseName = name;
+      } else if (latin && !cjk) {
+        data.basic.englishName = name;
+      } else if (cjk && latin) {
+        const cjkRuns = name.match(/[一-鿿]+/g);
+        const latinRuns = name.match(/[a-zA-Z][a-zA-Z\s]*[a-zA-Z]|[a-zA-Z]/g);
+        if (cjkRuns) data.basic.chineseName = cjkRuns.join("");
+        if (latinRuns) data.basic.englishName = latinRuns.join(" ").trim();
+      }
+    }
+
+    data.version = 2;
+    return data;
+  }
+
+  const MIGRATIONS = [
+    { from: 1, to: 2, migrate: migrateV1ToV2 },
+  ];
+
+  function applyMigrations(data) {
+    if (!data || typeof data !== "object") return data;
+    let current = typeof data.version === "number" ? data.version : 1;
+    for (const m of MIGRATIONS) {
+      if (current !== m.from) continue;
+      try {
+        data = m.migrate(data);
+        current = m.to;
+      } catch (err) {
+        // Migration failed — keep data as-is so user content is never lost.
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn(
+            "schema migration " + m.from + " → " + m.to + " failed; keeping original data",
+            err
+          );
+        }
+        break;
+      }
+    }
+    return data;
+  }
+
   // 兼容旧版本扁平 schema → 升级为结构化
   function upgradeLegacy(data) {
     if (!data || typeof data !== "object") return emptyResume();
@@ -139,12 +212,16 @@
       });
     }
     r.summary = data.summary || "";
+    // upgradeLegacy produces v1-shaped data so the migration chain runs
+    // afterwards (and backfills v2 fields like englishName/chineseName).
+    r.version = 1;
     return r;
   }
 
   // 把用户粘贴/导入的 JSON 规范化：补齐缺失字段，不抛错
   function normalizeResume(input) {
     const upgraded = upgradeLegacy(input);
+    const migrated = applyMigrations(upgraded);
     const out = emptyResume();
 
     const assignObj = (target, src, keys) => {
@@ -156,11 +233,11 @@
       });
     };
 
-    assignObj(out.basic, upgraded.basic, Object.keys(out.basic));
-    assignObj(out.intent, upgraded.intent, Object.keys(out.intent));
+    assignObj(out.basic, migrated.basic, Object.keys(out.basic));
+    assignObj(out.intent, migrated.intent, Object.keys(out.intent));
 
     const arraySection = (name) => {
-      const src = Array.isArray(upgraded[name]) ? upgraded[name] : [];
+      const src = Array.isArray(migrated[name]) ? migrated[name] : [];
       out[name] = src.map(item => {
         const clean = blank(name);
         if (!item || typeof item !== "object") return clean;
@@ -177,13 +254,14 @@
     arraySection("internship");
     arraySection("projects");
 
-    out.skills = Array.isArray(upgraded.skills)
-      ? upgraded.skills.filter(s => typeof s === "string")
+    out.skills = Array.isArray(migrated.skills)
+      ? migrated.skills.filter(s => typeof s === "string")
       : [];
-    out.languages = Array.isArray(upgraded.languages)
-      ? upgraded.languages.filter(s => typeof s === "string")
+    out.languages = Array.isArray(migrated.languages)
+      ? migrated.languages.filter(s => typeof s === "string")
       : [];
-    out.summary = typeof upgraded.summary === "string" ? upgraded.summary : "";
+    out.summary = typeof migrated.summary === "string" ? migrated.summary : "";
+    out.version = RESUME_SCHEMA.version;
 
     return out;
   }
@@ -236,6 +314,8 @@
   }
 
   global.RESUME_SCHEMA = RESUME_SCHEMA;
+  global.SCHEMA_MIGRATIONS = MIGRATIONS;
+  global.applyMigrations = applyMigrations;
   global.blankEntry = blank;
   global.emptyResume = emptyResume;
   global.normalizeResume = normalizeResume;

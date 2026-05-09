@@ -10,8 +10,10 @@ const {
 
 describe("RESUME_SCHEMA", () => {
   test("declares the documented top-level structure", () => {
-    expect(RESUME_SCHEMA.version).toBe(1);
+    expect(RESUME_SCHEMA.version).toBe(2);
     expect(RESUME_SCHEMA).toHaveProperty("basic.email");
+    expect(RESUME_SCHEMA).toHaveProperty("basic.englishName");
+    expect(RESUME_SCHEMA).toHaveProperty("basic.chineseName");
     expect(RESUME_SCHEMA).toHaveProperty("intent.apply_position");
     expect(Array.isArray(RESUME_SCHEMA.education)).toBe(true);
     expect(Array.isArray(RESUME_SCHEMA.experience)).toBe(true);
