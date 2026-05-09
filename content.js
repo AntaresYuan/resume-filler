@@ -3,9 +3,11 @@
 // (see manifest.json content_scripts order).
 
 // Field detection (FIELD_MAP, normalize*, getFieldLabel, matchResumeKey)
-// lives in lib/field-detect.js. This local alias keeps call sites short.
+// lives in lib/field-detect.js. Value-to-option matching (abbreviations,
+// synonyms, ranges) lives in lib/value-match.js.
 const FD = window.ResumeFillerFieldDetect;
 const { normalize, getFieldLabel, matchResumeKey } = FD;
+const VM = window.ResumeFillerValueMatch;
 
 const MULTI_ENTRY_SECTIONS = [
   {
@@ -79,72 +81,55 @@ function fillField(el, value) {
 
 function tryFillSelect(el, value) {
   if (!value) return false;
-  const v = normalize(String(value));
-  const opts = Array.from(el.options);
-  for (const opt of opts) {
-    if (normalize(opt.text) === v || normalize(opt.value) === v) {
-      el.value = opt.value;
-      el.dispatchEvent(new Event('change', { bubbles: true }));
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      return true;
-    }
-  }
-  for (const opt of opts) {
-    const t = normalize(opt.text);
-    if (t.length > 0 && (t.includes(v) || v.includes(t))) {
-      el.value = opt.value;
-      el.dispatchEvent(new Event('change', { bubbles: true }));
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      return true;
-    }
-  }
-  return false;
+  const candidates = Array.from(el.options).map((opt) => ({
+    text: opt.text,
+    value: opt.value,
+    raw: opt,
+  }));
+  const result = VM.pickBestOption(value, candidates);
+  if (!result) return false;
+  el.value = result.candidate.raw.value;
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  return true;
 }
 
 // ─── 自定义下拉框（combobox / 非原生 select）─────────────────────────────────
 
 async function tryFillCombobox(el, value) {
   if (!value) return false;
-  const v = normalize(String(value));
 
-  // 触发点击展开
+  // Trigger expand.
   el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
   el.click();
   el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
 
-  // 等候下拉渲染
-  await new Promise(r => setTimeout(r, 350));
+  await new Promise((r) => setTimeout(r, 350));
 
-  // 收集所有当前可见的 option 类元素
-  const candidates = Array.from(document.querySelectorAll(
+  const visibleOptions = Array.from(document.querySelectorAll(
     '[role="option"], [role="listitem"], [role="menuitem"], li, .option, .item, .dropdown-item, .select-option'
-  )).filter(opt => {
+  )).filter((opt) => {
     if (!opt.offsetParent) return false;
     const rect = opt.getBoundingClientRect();
     return rect.width > 0 && rect.height > 0;
   });
 
-  let best = null;
-  // 精确匹配
-  for (const opt of candidates) {
-    if (normalize(opt.textContent || '') === v) { best = opt; break; }
-  }
-  // 包含匹配
-  if (!best) {
-    for (const opt of candidates) {
-      const t = normalize(opt.textContent || '');
-      if (t.length > 0 && (t.includes(v) || v.includes(t))) { best = opt; break; }
-    }
-  }
+  const candidates = visibleOptions.map((opt) => ({
+    text: opt.textContent || '',
+    value: opt.textContent || '',
+    raw: opt,
+  }));
 
-  if (best) {
-    best.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-    best.click();
-    best.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+  const result = VM.pickBestOption(value, candidates);
+  if (result) {
+    const target = result.candidate.raw;
+    target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    target.click();
+    target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     return true;
   }
 
-  // 没找到 → 关闭下拉
+  // No match → close dropdown.
   document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
   document.body.click();
   return false;
