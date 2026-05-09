@@ -86,11 +86,11 @@ const MULTI_ENTRY_SECTIONS = [
 // ─── 文本规范化 ─────────────────────────────────────────────────────────────
 
 function normalize(str) {
-  return (str || '').toLowerCase().replace(/[\s_\-\.]/g, '');
+  return (str || '').toLowerCase().replace(/[\s_\-.]/g, '');
 }
 
 function normalizeSpaced(str) {
-  return (str || '').toLowerCase().replace(/[_\-\.]/g, ' ').replace(/\s+/g, ' ').trim();
+  return (str || '').toLowerCase().replace(/[_\-.]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function isCJKKey(str) {
@@ -424,11 +424,11 @@ async function fillCustomComboOption(trigger, value) {
   // 同时发 PointerEvent + MouseEvent（兼容只监听 pointer 的 Vue/React 组件）
   function doClick(el) {
     const init = { bubbles: true, cancelable: true };
-    try { el.dispatchEvent(new PointerEvent('pointerover',  init)); } catch(_) {}
-    try { el.dispatchEvent(new PointerEvent('pointerenter', { ...init, bubbles: false })); } catch(_) {}
-    try { el.dispatchEvent(new PointerEvent('pointerdown',  init)); } catch(_) {}
+    try { el.dispatchEvent(new PointerEvent('pointerover',  init)); } catch { /* PointerEvent unsupported */ }
+    try { el.dispatchEvent(new PointerEvent('pointerenter', { ...init, bubbles: false })); } catch { /* PointerEvent unsupported */ }
+    try { el.dispatchEvent(new PointerEvent('pointerdown',  init)); } catch { /* PointerEvent unsupported */ }
     el.dispatchEvent(new MouseEvent('mousedown', init));
-    try { el.dispatchEvent(new PointerEvent('pointerup', init)); } catch(_) {}
+    try { el.dispatchEvent(new PointerEvent('pointerup', init)); } catch { /* PointerEvent unsupported */ }
     el.dispatchEvent(new MouseEvent('mouseup',  init));
     el.dispatchEvent(new MouseEvent('click',    init));
   }

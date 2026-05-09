@@ -159,7 +159,7 @@
     assignObj(out.basic, upgraded.basic, Object.keys(out.basic));
     assignObj(out.intent, upgraded.intent, Object.keys(out.intent));
 
-    const arraySection = (name, sample) => {
+    const arraySection = (name) => {
       const src = Array.isArray(upgraded[name]) ? upgraded[name] : [];
       out[name] = src.map(item => {
         const clean = blank(name);

@@ -1,19 +1,6 @@
 const I18N = window.ResumeFillerI18n;
 let state = window.emptyResume();
 
-// ─── 自定义字段（板块 key → i18n key）────────────────────────────────────────
-const CUSTOM_SECTION_I18N = {
-  basic:      'options.section.basic_title',
-  intent:     'options.section.intent_title',
-  education:  'options.section.education_title',
-  experience: 'options.section.experience_title',
-  internship: 'options.section.internship_title',
-  projects:   'options.section.projects_title',
-  skills:     'options.section.skills_title',
-  languages:  'options.section.languages_title',
-  other:      'common.other',
-};
-
 function renderCustomFields(cf) {
   // 清空所有 data-custom-for 容器
   document.querySelectorAll('[data-custom-for]').forEach(el => { el.innerHTML = ''; });
@@ -48,6 +35,7 @@ function renderCustomFields(cf) {
       delBtn.textContent = I18N.t('common.delete');
       delBtn.addEventListener('click', () => deleteCustomField(sectionKey, label));
 
+      // eslint-disable-next-line no-unsanitized/property -- label/value escaped via escapeHtml
       row.innerHTML = `
         <span class="cf-label">${escapeHtml(label)}</span>
         <span class="cf-value">${escapeHtml(value)}</span>
@@ -173,6 +161,7 @@ function buildArrayCard(section, idx) {
 
   const head = document.createElement('div');
   head.className = 'card-head';
+  // eslint-disable-next-line no-unsanitized/property -- titleText and i18n string escaped via escapeHtml
   head.innerHTML = `
     <div class="card-title">
       #${idx + 1} · ${escapeHtml(titleText)}
@@ -221,6 +210,7 @@ function buildArrayCard(section, idx) {
   fields.forEach((field) => {
     const wrap = document.createElement('div');
     wrap.className = 'field' + (field.col === 2 ? ' full' : '');
+    // eslint-disable-next-line no-unsanitized/property -- i18n string escaped via escapeHtml
     wrap.innerHTML = `<label>${escapeHtml(I18N.t(field.labelKey))}</label>`;
     const input = document.createElement(field.type === 'textarea' ? 'textarea' : 'input');
     input.placeholder = field.placeholderKey ? I18N.t(field.placeholderKey) : '';
@@ -233,6 +223,7 @@ function buildArrayCard(section, idx) {
         const cardTitle = card.querySelector('.card-title');
         const display = state[section][idx][field.key] || labelForSection(section);
         const note = idx === 0 ? ` <span class="muted">${escapeHtml(I18N.t('common.priority_note'))}</span>` : '';
+        // eslint-disable-next-line no-unsanitized/property -- display and note escaped via escapeHtml
         cardTitle.innerHTML = `#${idx + 1} · ${escapeHtml(display)}${note}`;
       }
     });
@@ -244,6 +235,7 @@ function buildArrayCard(section, idx) {
   if (section === 'experience' || section === 'internship') {
     const row = document.createElement('div');
     row.className = 'field full';
+    // eslint-disable-next-line no-unsanitized/property -- section/idx are internal identifiers, i18n escaped via escapeHtml
     row.innerHTML = `
       <div class="checkbox-row">
         <input type="checkbox" id="cur-${section}-${idx}" ${item.current ? 'checked' : ''}>
