@@ -40,7 +40,7 @@ CI runs `npm run lint` and `npm test` on every PR.
 | `options.js` / `options.html` | Resume editor |
 | `i18n.js` | zh/en localization |
 
-See `ARCHITECTURE.md` (planned in #2) for the full module map and data flow.
+See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full module map, data flow, and `content.js` fill pipeline. See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the branch/PR flow, smoke-test checklist, and how to add a new field-detection rule.
 
 ## Roadmap
 
