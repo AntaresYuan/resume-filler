@@ -1,34 +1,11 @@
-// content.js — 扫页面、填能填的、报告填不了的
-// 需要先加载 schema.js（见 manifest.json 的 content_scripts 顺序）
+// content.js — scan the page, fill what we can, report what we can't.
+// Requires schema.js and lib/field-detect.js to load first
+// (see manifest.json content_scripts order).
 
-const FIELD_MAP = [
-  { keys: ['firstname', 'first_name', 'given', '名字', '名（', '（名）', 'first name'], resumeKey: 'firstName' },
-  { keys: ['lastname', 'last_name', 'family', 'surname', '姓氏', '（姓）', 'last name'], resumeKey: 'lastName' },
-  { keys: ['name', 'fullname', 'full_name', '姓名', 'your name', 'applicant'], resumeKey: 'name' },
-  { keys: ['email', 'e-mail', '邮箱', '电子邮件', 'mail'], resumeKey: 'email' },
-  { keys: ['phone', 'mobile', 'tel', '电话', '手机', 'contact'], resumeKey: 'phone' },
-  { keys: ['wechat', '微信'], resumeKey: 'wechat' },
-  { keys: ['location', 'city', 'address', '城市', '地址', '所在地', 'residence', '期望城市', '工作城市'], resumeKey: 'location' },
-  { keys: ['linkedin'], resumeKey: 'linkedin' },
-  { keys: ['github'], resumeKey: 'github' },
-  { keys: ['portfolio', 'website', '个人网站'], resumeKey: 'portfolio' },
-  { keys: ['school', 'university', 'college', '学校', '院校', '毕业院校', '学校名称'], resumeKey: 'edu_school' },
-  { keys: ['major', 'field of study', '专业', '专业名称'], resumeKey: 'edu_major' },
-  { keys: ['degree', '学历', '学位'], resumeKey: 'edu_degree' },
-  { keys: ['gpa', '绩点'], resumeKey: 'edu_gpa' },
-  { keys: ['apply position', 'applied position', 'desired position', 'desired role', 'job title', 'jobtitle', '应聘职位', '求职意向', '期望职位', '目标岗位'], resumeKey: 'apply_position' },
-  { keys: ['salary', 'expectation', 'expected salary', 'desired salary', '期望薪资', '薪资期望', '薪酬', '期望工资'], resumeKey: 'salary' },
-  { keys: ['available', 'notice period', '到岗', '入职', '最早到岗', '到岗时间'], resumeKey: 'available_date' },
-  { keys: ['years of experience', 'years experience', 'work experience years', '工作年限', '经验年限', '工龄'], resumeKey: 'years_exp' },
-  { keys: ['company', 'employer', 'company name', '公司', '公司名称', '当前公司', '现公司', '工作单位'], resumeKey: 'current_company' },
-  { keys: ['job title', 'position title', 'role title', '职位', '职位名称', '岗位名称', '担任职位'], resumeKey: 'current_title' },
-  { keys: ['job description', 'work description', 'responsibilities', 'duties', '工作职责', '工作描述', '职责描述', '工作内容', '岗位职责'], resumeKey: 'job_description' },
-  { keys: ['skills', 'skill', '技能', '专业技能'], resumeKey: 'skills' },
-  { keys: ['language', 'languages', '语言'], resumeKey: 'languages' },
-  { keys: ['summary', 'intro', 'introduction', 'about', 'self', '自我介绍', '个人简介', '自我描述', 'bio'], resumeKey: 'summary' },
-  { keys: ['project name', '项目名称', '项目名'], resumeKey: 'project_name' },
-  { keys: ['project description', 'project_desc', '项目描述'], resumeKey: 'project_description' },
-];
+// Field detection (FIELD_MAP, normalize*, getFieldLabel, matchResumeKey)
+// lives in lib/field-detect.js. This local alias keeps call sites short.
+const FD = window.ResumeFillerFieldDetect;
+const { normalize, getFieldLabel, matchResumeKey } = FD;
 
 const MULTI_ENTRY_SECTIONS = [
   {
@@ -83,102 +60,6 @@ const MULTI_ENTRY_SECTIONS = [
   },
 ];
 
-// ─── 文本规范化 ─────────────────────────────────────────────────────────────
-
-function normalize(str) {
-  return (str || '').toLowerCase().replace(/[\s_\-.]/g, '');
-}
-
-function normalizeSpaced(str) {
-  return (str || '').toLowerCase().replace(/[_\-.]/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function isCJKKey(str) {
-  return /[\u4e00-\u9fff]/.test(str);
-}
-
-// ─── 字段标签识别（支持 label / aria / div / span 等） ──────────────────────
-
-function getFieldLabel(el) {
-  // 1. <label for="id">
-  if (el.id) {
-    const lbl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
-    if (lbl) return (lbl.innerText || lbl.textContent || '').trim();
-  }
-  // 2. aria-label / aria-labelledby
-  const ariaLabel = el.getAttribute('aria-label');
-  if (ariaLabel) return ariaLabel.trim();
-  const labelledBy = el.getAttribute('aria-labelledby');
-  if (labelledBy) {
-    const ref = document.getElementById(labelledBy);
-    if (ref) return (ref.innerText || ref.textContent || '').trim();
-  }
-  // 3. 向上遍历，找直接子节点中的文字型标签（label / div / span / p）
-  //    只取不包含 input 的短文本（< 60 字），这类通常是表单标签
-  let parent = el.parentElement;
-  for (let depth = 0; depth < 6 && parent; depth++) {
-    for (const child of parent.children) {
-      if (child.contains(el)) continue; // 跳过包含 el 的容器
-      if (['LABEL', 'DIV', 'SPAN', 'P', 'DT', 'LEGEND', 'H4', 'H5', 'H6'].includes(child.tagName)) {
-        if (child.querySelector('input, textarea, select')) continue; // 跳过含输入控件的容器
-        const text = (child.innerText || child.textContent || '').trim();
-        if (text.length > 0 && text.length < 60) return text;
-      }
-    }
-    parent = parent.parentElement;
-  }
-  // 4. placeholder 兜底
-  const ph = el.getAttribute('placeholder');
-  if (ph && ph.length < 40) return ph;
-  return el.name || el.id || '';
-}
-
-// ─── 字段匹配 ────────────────────────────────────────────────────────────────
-
-const NAME_CONTEXT_BLOCKLIST = [
-  'company', 'employer', 'organization', 'org', 'school', 'university',
-  'college', 'institution', 'project', 'username', 'user', 'team', 'group',
-  'job', 'position', 'role', 'product', 'brand', 'title',
-];
-
-function matchResumeKey(el) {
-  const rawValues = [
-    el.name,
-    el.id,
-    el.getAttribute('placeholder'),
-    el.getAttribute('aria-label'),
-    getFieldLabel(el),
-  ];
-  const signalsCJK = rawValues.map(normalize).join(' ');
-  const signalsLatin = rawValues.filter(Boolean).map(normalizeSpaced);
-  const signalsLatinJoined = signalsLatin.join(' ');
-
-  for (const rule of FIELD_MAP) {
-    for (const key of rule.keys) {
-      let matched = false;
-      if (isCJKKey(key)) {
-        if (signalsCJK.includes(normalize(key))) matched = true;
-      } else {
-        const escaped = normalizeSpaced(key).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const re = new RegExp(`(?:^|\\s)${escaped}(?:\\s|$)`);
-        if (signalsLatin.some(s => re.test(s))) matched = true;
-      }
-      if (matched) {
-        if (rule.resumeKey === 'name' || rule.resumeKey === 'firstName' || rule.resumeKey === 'lastName') {
-          const blocked = NAME_CONTEXT_BLOCKLIST.some(w => signalsLatinJoined.includes(w));
-          const blockedCJK =
-            signalsCJK.includes('名称') || signalsCJK.includes('公司') ||
-            signalsCJK.includes('职位') || signalsCJK.includes('岗位') ||
-            signalsCJK.includes('专业') || signalsCJK.includes('学校') ||
-            signalsCJK.includes('项目');
-          if (blocked || blockedCJK) continue;
-        }
-        return rule.resumeKey;
-      }
-    }
-  }
-  return null;
-}
 
 // ─── input / textarea 填值 ───────────────────────────────────────────────────
 
@@ -558,7 +439,8 @@ function fillInputBatch(inputs, flat, filled, manual, skipSet) {
       manual.push({ label: String(label).trim(), hint: '日期', value: null });
       continue;
     }
-    const key = matchResumeKey(el);
+    const match = matchResumeKey(el);
+    const key = match && match.key;
     if (key && flat[key]) {
       fillField(el, flat[key]);
       filled.push(key);
@@ -736,7 +618,8 @@ async function handleFill(resumeData, customFields) {
     // 年/月 select 交给日期模块处理
     if (isYearSelect(el) || isMonthSelect(el)) continue;
 
-    const key = matchResumeKey(el);
+    const match = matchResumeKey(el);
+    const key = match && match.key;
     if (key && flat[key] && tryFillSelect(el, flat[key])) {
       filled.push(key);
     } else {
@@ -751,7 +634,8 @@ async function handleFill(resumeData, customFields) {
   )).filter(el => el.offsetParent && el.tagName.toLowerCase() !== 'select');
 
   for (const el of comboboxes) {
-    const key = matchResumeKey(el);
+    const match = matchResumeKey(el);
+    const key = match && match.key;
     if (key && flat[key]) {
       const ok = await tryFillCombobox(el, flat[key]);
       if (ok) filled.push(key);
@@ -761,7 +645,8 @@ async function handleFill(resumeData, customFields) {
   // Phase 4：富文本 / contenteditable
   for (const el of document.querySelectorAll('[contenteditable="true"], [role="textbox"]')) {
     const label = getFieldLabel(el) || '富文本编辑器';
-    const key = matchResumeKey(el);
+    const match = matchResumeKey(el);
+    const key = match && match.key;
     manual.push({
       label: String(label).trim(),
       hint: '富文本',
