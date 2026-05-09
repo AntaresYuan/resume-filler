@@ -6,7 +6,9 @@
 // lives in lib/field-detect.js. Value-to-option matching (abbreviations,
 // synonyms, ranges) lives in lib/value-match.js. Bilingual translation
 // (Chinese ↔ English schools / companies / degrees / names) lives in
-// lib/cross-lingual.js.
+// lib/cross-lingual.js. LLM batch fallback (matchWithCache) lives in
+// lib/llm-match.js (only invoked when handleFill is called with
+// aiTakeover: true and chrome.storage.local.aiSettings.enabled).
 const FD = window.ResumeFillerFieldDetect;
 const { normalize, getFieldLabel, matchResumeKey } = FD;
 const VM = window.ResumeFillerValueMatch;
@@ -576,7 +578,7 @@ async function fillAllSectionDates(resume, filled) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'fill') {
-    handleFill(msg.resume, msg.customFields || {}).then(sendResponse);
+    handleFill(msg.resume, msg.customFields || {}, { aiTakeover: !!msg.aiTakeover }).then(sendResponse);
     return true;
   }
   if (msg.action === 'ping') {
@@ -585,7 +587,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
-async function handleFill(resumeData, customFields) {
+async function handleFill(resumeData, customFields, opts) {
+  opts = opts || {};
   let flat;
   if (typeof window.flattenResumeForFill === 'function') {
     flat = window.flattenResumeForFill(resumeData);
@@ -677,5 +680,71 @@ async function handleFill(resumeData, customFields) {
     }
   }
 
+  // Phase 8 (optional, #9): LLM batch fallback for unmatched labels.
+  // Runs only when the popup explicitly requested aiTakeover AND the
+  // user has enabled AI in options. Failures degrade silently — the
+  // user sees the original manual list.
+  if (opts.aiTakeover) {
+    const aiFilled = await runLLMFallback(manual, flat);
+    if (aiFilled.length > 0) {
+      filled.push(...aiFilled);
+      // Drop AI-filled entries from the manual list so the popup UI
+      // doesn't ask the user to handle them again.
+      const filledLabelSet = new Set(aiFilled.map((s) => s.replace(/^ai:/, '')));
+      for (let i = manual.length - 1; i >= 0; i--) {
+        if (filledLabelSet.has(manual[i].label)) manual.splice(i, 1);
+      }
+    }
+  }
+
   return { filled, manual };
+}
+
+async function runLLMFallback(manual, flat) {
+  const LP = window.ResumeFillerLLMProviders;
+  const LM = window.ResumeFillerLLMMatch;
+  if (!LP || !LM) return [];
+  if (!manual || manual.length === 0) return [];
+
+  const settings = await new Promise((resolve) => {
+    try {
+      chrome.storage.local.get('aiSettings', (res) => resolve(res?.aiSettings || null));
+    } catch {
+      resolve(null);
+    }
+  });
+  if (!settings || !settings.enabled) return [];
+
+  const labels = manual.map((m) => m.label).filter(Boolean);
+  if (labels.length === 0) return [];
+  const domain = (typeof location !== 'undefined' && location.hostname) || '_';
+
+  const values = await LM.matchWithCache(domain, labels, flat, settings);
+  if (!values || Object.keys(values).length === 0) return [];
+
+  const aiFilled = [];
+  // Re-traverse fields and apply LLM-proposed values to whichever
+  // matching label we can find.
+  const allFields = Array.from(
+    document.querySelectorAll(
+      'input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio]), select, textarea, [contenteditable="true"], [role="combobox"], [aria-haspopup="listbox"]'
+    )
+  );
+  for (const [label, value] of Object.entries(values)) {
+    if (typeof value !== 'string' || !value.trim()) continue;
+    const target = allFields.find((el) => getFieldLabel(el) === label);
+    if (!target) continue;
+    const tag = target.tagName.toLowerCase();
+    let ok = false;
+    if (tag === 'select') {
+      ok = tryFillSelect(target, value);
+    } else if (target.getAttribute('role') === 'combobox' || target.getAttribute('aria-haspopup')) {
+      ok = await tryFillCombobox(target, value);
+    } else if (tag === 'input' || tag === 'textarea') {
+      fillField(target, value);
+      ok = true;
+    }
+    if (ok) aiFilled.push('ai:' + label);
+  }
+  return aiFilled;
 }
