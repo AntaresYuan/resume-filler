@@ -240,6 +240,35 @@ describe('migrateLegacyResume', () => {
     const store = P.migrateLegacyResume(resume);
     expect(P.getActiveProfile(store).name).toBe('Resume 1');
   });
+  test('uses a deterministic id so concurrent migrations converge', () => {
+    // Two surfaces (popup + options) calling migrate independently must
+    // produce identical stores so last-write-wins doesn't strand one
+    // surface with a profile id the other doesn't know about.
+    const resume = sampleResume({ intent: { apply_position: 'PM' } });
+    const a = P.migrateLegacyResume(resume);
+    const b = P.migrateLegacyResume(resume);
+    expect(a).toEqual(b);
+    expect(a.activeProfileId).toBe(b.activeProfileId);
+  });
+});
+
+describe('createProfile orphan-active-id handling', () => {
+  test('new profile claims active when current active id has no matching profile', () => {
+    // Reproduce the orphan-active state: activeProfileId set but the
+    // profile it points at is gone (can happen mid-flight in paste-import
+    // paths). createProfile should detect and re-anchor active to itself.
+    const orphan = { profiles: {}, activeProfileId: 'p_ghost' };
+    const next = P.createProfile(orphan, 'New', sampleResume());
+    const newId = Object.keys(next.profiles)[0];
+    expect(next.activeProfileId).toBe(newId);
+    expect(next.activeProfileId).not.toBe('p_ghost');
+  });
+  test('preserves active when current active id is valid', () => {
+    let store = P.createProfile(P.emptyStore(), 'A', sampleResume());
+    const aId = store.activeProfileId;
+    store = P.createProfile(store, 'B', sampleResume());
+    expect(store.activeProfileId).toBe(aId);
+  });
 });
 
 describe('immutability', () => {

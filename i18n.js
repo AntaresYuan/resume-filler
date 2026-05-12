@@ -245,7 +245,8 @@ const ResumeFillerI18n = (() => {
       'options.profile_delete': '删除此简历',
       'options.profile_delete_confirm': '删除「{name}」？此操作不可撤销。',
       'options.profile_duplicated': '已复制为新简历',
-      'options.profile_deleted': '已删除'
+      'options.profile_deleted': '已删除',
+      'options.profile_renamed': '已重命名'
     },
     en: {
       'common.lang_toggle': '中文',
@@ -488,7 +489,8 @@ const ResumeFillerI18n = (() => {
       'options.profile_delete': 'Delete this resume',
       'options.profile_delete_confirm': "Delete '{name}'? This can't be undone.",
       'options.profile_duplicated': 'Duplicated as new resume',
-      'options.profile_deleted': 'Deleted'
+      'options.profile_deleted': 'Deleted',
+      'options.profile_renamed': 'Renamed'
     }
   };
 

@@ -29,9 +29,20 @@ function loadProfileStore(cb) {
   });
 }
 
+// Mirrors popup.js's serialization: rapid duplicate → rename in the profile
+// bar can interleave reads and writes if these calls run as plain async
+// fire-and-forget. Chaining on a per-surface Promise queue keeps every
+// chrome.storage.local.set ordered.
+let _storageWriteChain = Promise.resolve();
 function saveProfileStore(store, cb) {
   profileStore = store;
-  chrome.storage.local.set({ resumes: store }, cb || (() => {}));
+  _storageWriteChain = _storageWriteChain.then(() => new Promise((resolve) => {
+    chrome.storage.local.set({ resumes: store }, () => {
+      if (cb) cb();
+      resolve();
+    });
+  }));
+  return _storageWriteChain;
 }
 
 // Refreshes the rename input + delete button enabled-state. Called whenever
@@ -63,19 +74,23 @@ function commitProfileRename() {
   }
   saveProfileStore(next, () => {
     renderProfileBar();
-    toast(I18N.t('options.toast_saved'), 'success');
+    toast(I18N.t('options.profile_renamed'), 'success');
   });
 }
 
 function handleProfileDuplicate() {
-  // Snapshot the editor's current state into the active profile first so
-  // the duplicate inherits any unsaved edits.
-  collectFlatFields();
-  const normalized = window.normalizeResume(state);
   const active = PROFILES.getActiveProfile(profileStore);
   if (!active) return;
-  let store = PROFILES.updateProfileData(profileStore, active.id, normalized);
-  store = PROFILES.duplicateProfile(store, active.id);
+  // Source keeps its last-saved data untouched. The duplicate is seeded
+  // from the source's stored data, then the editor's current edits
+  // (including unsaved ones) are written into the duplicate only — this
+  // matches the common "I want a copy of what I'm working on" intent
+  // without silently committing edits back to the original.
+  collectFlatFields();
+  const normalized = window.normalizeResume(state);
+  let store = PROFILES.duplicateProfile(profileStore, active.id);
+  const newId = store.activeProfileId;
+  store = PROFILES.updateProfileData(store, newId, normalized);
   saveProfileStore(store, () => {
     const newActive = PROFILES.getActiveProfile(profileStore);
     state = newActive ? window.normalizeResume(newActive.data || window.emptyResume()) : window.emptyResume();

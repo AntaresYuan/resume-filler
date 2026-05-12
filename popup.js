@@ -33,7 +33,16 @@ function loadProfileStore(cb) {
 
 function saveProfileStore(store, cb) {
   profileStore = store;
-  chrome.storage.local.set({ resumes: store }, cb || (() => {}));
+  // Routes through the same Promise chain as customFields/labelMappings so
+  // a rapid duplicate → rename sequence can't interleave reads and writes
+  // (each write awaits the previous one to land).
+  _storageWriteChain = _storageWriteChain.then(() => new Promise((resolve) => {
+    chrome.storage.local.set({ resumes: store }, () => {
+      if (cb) cb();
+      resolve();
+    });
+  }));
+  return _storageWriteChain;
 }
 
 function getActiveResume() {
