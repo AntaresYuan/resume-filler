@@ -231,7 +231,13 @@ const ResumeFillerI18n = (() => {
       'options.projects.start_placeholder': 'YYYY-MM',
       'options.projects.end_label': '结束时间',
       'options.projects.end_placeholder': 'YYYY-MM（至今留空）',
-      'options.projects.desc_label': '项目描述'
+      'options.projects.desc_label': '项目描述',
+
+      'validation.required': '必填',
+      'validation.email_format': '邮箱格式不正确',
+      'validation.phone_format': '手机号格式不正确',
+      'validation.url_format': '链接格式不正确',
+      'validation.banner_title': '已保存。还有 {count} 个字段格式有问题需要修复：'
     },
     en: {
       'common.lang_toggle': '中文',
@@ -460,7 +466,13 @@ const ResumeFillerI18n = (() => {
       'options.projects.start_placeholder': 'YYYY-MM',
       'options.projects.end_label': 'End date',
       'options.projects.end_placeholder': 'YYYY-MM (leave blank if ongoing)',
-      'options.projects.desc_label': 'Project description'
+      'options.projects.desc_label': 'Project description',
+
+      'validation.required': 'Required',
+      'validation.email_format': 'Invalid email format',
+      'validation.phone_format': 'Invalid phone format',
+      'validation.url_format': 'Invalid URL format',
+      'validation.banner_title': 'Saved. {count} field(s) still need format fixes:'
     }
   };
 

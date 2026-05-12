@@ -1,5 +1,92 @@
 const I18N = window.ResumeFillerI18n;
+const V = window.ResumeFillerValidators;
 let state = window.emptyResume();
+
+// Section + field combinations that have format validation. Map (section,
+// key) → i18n label key, so the save-time banner can render
+// "Basic · Email: invalid email format" with localized strings.
+const VALIDATION_FIELD_LABEL_KEYS = {
+  basic: {
+    name: 'options.basic.name_label',
+    email: 'options.basic.email_label',
+    phone: 'options.basic.phone_label',
+    linkedin: 'options.basic.linkedin_label',
+    github: 'options.basic.github_label',
+    portfolio: 'options.basic.portfolio_label',
+  },
+  education: { school: 'options.education.school_label' },
+  experience: { company: 'options.experience.company_label' },
+  internship: { company: 'options.internship.company_label' },
+  projects: { name: 'options.projects.name_label', link: 'options.projects.link_label' },
+};
+const SECTION_NAME_KEYS = {
+  basic: 'popup.section.basic',
+  education: 'popup.section.education',
+  experience: 'popup.section.experience',
+  internship: 'popup.section.internship',
+  projects: 'popup.section.projects',
+};
+
+// Toggle the per-input inline error state. errorKey === null clears the
+// error; otherwise we add the `.invalid` class and insert a sibling
+// `.field-error` <span>. The error <span> is reused across calls so
+// repeated blur events don't accumulate DOM nodes.
+function setInlineError(input, errorKey) {
+  const wrap = input.parentElement;
+  if (!wrap) return;
+  let errEl = wrap.querySelector('.field-error');
+  if (!errorKey) {
+    input.classList.remove('invalid');
+    if (errEl) errEl.remove();
+    return;
+  }
+  input.classList.add('invalid');
+  if (!errEl) {
+    errEl = document.createElement('span');
+    errEl.className = 'field-error';
+    wrap.appendChild(errEl);
+  }
+  errEl.textContent = I18N.t(errorKey);
+}
+
+// Wire a blur listener that runs the given pure validator and updates the
+// inline error state. Validators return null on success or an i18n key
+// on failure (matching the contract in lib/validators.js).
+function attachBlurValidator(input, validator) {
+  input.addEventListener('blur', () => {
+    setInlineError(input, validator(input.value.trim()));
+  });
+}
+
+// Render the save-time top banner from validateResume's issue list. Empty
+// list hides the banner; non-empty list shows a count plus a per-issue
+// bullet so the user knows what to fix.
+function renderValidationBanner(issues) {
+  const banner = document.getElementById('validationBanner');
+  if (!banner) return;
+  if (!issues || issues.length === 0) {
+    banner.classList.remove('show');
+    banner.innerHTML = '';
+    return;
+  }
+  const title = document.createElement('div');
+  title.className = 'validation-banner-title';
+  title.textContent = I18N.t('validation.banner_title', { count: issues.length });
+  const list = document.createElement('ul');
+  issues.forEach((issue) => {
+    const li = document.createElement('li');
+    const sectionName = I18N.t(SECTION_NAME_KEYS[issue.section] || ('popup.section.' + issue.section));
+    const fieldKeyMap = VALIDATION_FIELD_LABEL_KEYS[issue.section] || {};
+    const fieldLabel = fieldKeyMap[issue.key] ? I18N.t(fieldKeyMap[issue.key]) : issue.key;
+    const idxLabel = issue.idx != null ? ' #' + (issue.idx + 1) : '';
+    li.textContent = sectionName + idxLabel + ' · ' + fieldLabel + ' — ' + I18N.t(issue.errorKey);
+    list.appendChild(li);
+  });
+  banner.innerHTML = '';
+  banner.appendChild(title);
+  banner.appendChild(list);
+  banner.classList.add('show');
+}
 
 function renderCustomFields(cf) {
   // 清空所有 data-custom-for 容器
@@ -229,6 +316,9 @@ function buildArrayCard(section, idx) {
     });
 
     wrap.appendChild(input);
+    if (section === 'projects' && field.key === 'link') {
+      attachBlurValidator(input, V.validateUrl);
+    }
     grid.appendChild(wrap);
   });
 
@@ -318,6 +408,12 @@ function hydrate() {
 
   document.querySelectorAll('[data-path]').forEach((el) => {
     el.value = getPath(state, el.dataset.path) || '';
+    // Refresh any pre-existing inline error message so it picks up the new
+    // language. The validator itself is path-keyed and language-agnostic.
+    if (el.classList.contains('invalid')) {
+      const validator = V.validatorForPath(el.dataset.path);
+      if (validator) setInlineError(el, validator(el.value.trim()));
+    }
   });
 
   renderArraySection('education');
@@ -326,6 +422,17 @@ function hydrate() {
   renderArraySection('projects');
   renderTags('skills', 'skills-editor', 'skills-input');
   renderTags('languages', 'languages-editor', 'languages-input');
+}
+
+// Attach blur validators to the static [data-path] inputs once at startup.
+// Static elements aren't rebuilt by hydrate() (only their values are
+// reset), so a single attach is enough — no need for an "already attached"
+// guard.
+function initStaticFieldValidation() {
+  document.querySelectorAll('[data-path]').forEach((el) => {
+    const validator = V.validatorForPath(el.dataset.path);
+    if (validator) attachBlurValidator(el, validator);
+  });
 }
 
 function collectFlatFields() {
@@ -339,6 +446,8 @@ function save() {
   const resume = window.normalizeResume(state);
   state = resume;
 
+  // Non-blocking: persist first, then surface issues. Users can save a
+  // draft with format errors (acceptance criterion in #11).
   chrome.storage.local.set({ resume }, () => {
     const btn = document.getElementById('btn-save');
     const defaultText = I18N.t('options.btn_save');
@@ -348,7 +457,13 @@ function save() {
       btn.textContent = defaultText;
       btn.classList.remove('saved');
     }, 1600);
-    toast(I18N.t('options.toast_saved'), 'success');
+    const issues = V.validateResume(resume);
+    renderValidationBanner(issues);
+    if (issues.length === 0) {
+      toast(I18N.t('options.toast_saved'), 'success');
+    } else {
+      toast(I18N.t('validation.banner_title', { count: issues.length }), 'warn');
+    }
   });
 }
 
@@ -445,6 +560,13 @@ window.addEventListener('resumefiller:languagechange', () => {
   if (!saveBtn.classList.contains('saved')) {
     saveBtn.textContent = I18N.t('options.btn_save');
   }
+  // Re-render banner contents in the new language if a previous save left
+  // it visible. Re-running validateResume keeps the displayed issues in
+  // sync with the current state too.
+  const banner = document.getElementById('validationBanner');
+  if (banner && banner.classList.contains('show')) {
+    renderValidationBanner(V.validateResume(state));
+  }
   chrome.storage.local.get('customFields', ({ customFields }) => {
     renderCustomFields(customFields || {});
   });
@@ -457,6 +579,7 @@ I18N.init().then(() => {
   chrome.storage.local.get(['resume', 'customFields'], ({ resume, customFields }) => {
     state = resume ? window.normalizeResume(resume) : window.emptyResume();
     hydrate();
+    initStaticFieldValidation();
     renderCustomFields(customFields || {});
   });
   initAiSettings();
