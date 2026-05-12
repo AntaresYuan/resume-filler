@@ -17,3 +17,20 @@ Autonomous dev-loop run log. One entry per task completed by Claude Code via the
   - `tests/label-classifier.test.js` "covers every FIELD_MAP key" test asserts a hard-coded expected list rather than introspecting `content.js`'s `FIELD_MAP` — new resume keys won't fail the test. Cosmetic.
   - `lib/label-classifier.js` "experience" bucket contains `expected` and `available`, which match Workday intent labels ("Expected start date", "Available date") rather than work experience. Consider a dedicated `intent` bucket.
   - a11y: `aiTakeoverBtn` / `skipBtn` / `mapSelect` lack `aria-label`s; `.manual-group-title` is `<div>` rather than a heading. Screen-reader hierarchy is flat.
+
+---
+
+## 2026-05-12 · PR #26 — Per-section validation in resume editor (closes #11)
+
+- **Branch:** `feat/11-resume-validation` (squash-merged as `3acf49e`, branch deleted)
+- **Issue:** #11 (auto-closed via "Closes #11")
+- **Files:** `lib/validators.js` (new, +140), `tests/validators.test.js` (new, +190), `options.js` (+125/-3), `options.html` (+44), `i18n.js` (+16). Total +512/-3 across 5 files.
+- **Behaviors:** pure regex validators (email, international phone, URL) + `validateResume()` that returns a structured issue list. Inline blur errors on basic `email/phone/linkedin/github/portfolio` and `projects[].link`. Save-time top banner summarizing remaining issues — saving never blocked.
+- **Verification:** `npm run lint` clean, `npm test` 237/237 (was 190; +47 from validator suite including post-review URL cases), `node -c` parse OK, CI green (44s + 13s).
+- **Sub-agent review:** flagged URL regex rejecting `linkedin.com?ref=share` and `example.com#anchor` (real share-link shapes). Fixed in `69ae664` by widening tail from `(\/[^\s]*)?` to `([/?#][^\s]*)?` + 2 new tests.
+- **Follow-ups recorded (non-blocking, not opened as issues yet):**
+  - `options.js` `save()` writes `chrome.storage.local.set({ resume })` without the `mutateStorage` serialization PR #25 introduced for popup.js. Lower race risk (full replace) but worth converting in a future cleanup.
+  - On `resumefiller:languagechange`, banner re-renders without first running `collectFlatFields()` — banner reflects post-save state, not current DOM.
+  - Banner doesn't auto-clear when user fixes errors mid-edit.
+  - Inline `.field-error` spans aren't linked to inputs via `aria-describedby`.
+  - Pre-existing (not from this PR): Chinese comments in `renderCustomFields`.
