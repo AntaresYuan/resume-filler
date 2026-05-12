@@ -58,6 +58,8 @@ describe('validateUrl', () => {
     'github.com/foo',
     'sub.domain.example.io/path/to/thing?query=1#frag',
     'foo.bar.co.uk',
+    'linkedin.com?ref=share',
+    'example.com#anchor',
   ])('accepts valid: %s', (u) => {
     expect(V.validateUrl(u)).toBeNull();
   });
