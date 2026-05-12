@@ -59,11 +59,21 @@ Autonomous dev-loop run log. One entry per task completed by Claude Code via the
 
 ---
 
+## 2026-05-12 · PR #28 — Add DeepSeek as a preset LLM provider (no-issue follow-up)
+
+- **Branch:** `feat/add-deepseek-provider` (squash-merged as `3d56060`, branch deleted)
+- **Origin:** opportunistic add suggested mid-conversation — Doubao already covers the China-side LLM access case, but Doubao's funnel (火山方舟 console + endpoint id creation) and DeepSeek's funnel (key paste only) attract different user pools, and DeepSeek has higher mindshare in CN dev circles.
+- **Files:** `lib/llm-providers.js` (+24/-1), `tests/llm-providers.test.js` (+18/-2). +41/-3 total.
+- **Verification:** `npm run lint` clean, `npm test` 278/278 (+2 from DeepSeek header/body shape tests), CI green (15s). Existing `OpenAI/Anthropic/Doubao/Custom` paths untouched.
+- **Sub-agent review skipped (intentional):** purely additive provider config matching the OpenAI entry's shape; existing test contract + 2 new tests cover correctness. Marginal value of another review didn't pencil out vs. the three PRs earlier in this loop where the agent caught real bugs. Documenting the call so the next loop iteration doesn't read "no review" as an oversight.
+
+---
+
 ## 2026-05-12 · Loop complete
 
-**Total shipped in this run:** PR #25 (closes #10), PR #26 (closes #11), PR #27 (closes #14).
+**Total shipped in this run:** PR #25 (closes #10), PR #26 (closes #11), PR #27 (closes #14), PR #28 (no-issue, DeepSeek provider preset).
 
-**Test count:** 190 → 276 (+86 across label-classifier, validators, profiles, and follow-up cases).
+**Test count:** 190 → 278 (+88 across label-classifier, validators, profiles, DeepSeek provider, and follow-up cases).
 
 **Remaining open issues, all still blocked on user input:**
 
