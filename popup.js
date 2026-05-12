@@ -7,47 +7,66 @@ let lastFillManual = [];
 
 // ─── 未匹配字段 → 板块映射（新增，不覆盖现有内容）────────────────────────────
 
-const RESUME_SECTION_OPTIONS = [
-  { label: '基本信息 / Basic Info', key: 'basic' },
-  { label: '求职意向 / Job Target', key: 'intent' },
-  { label: '教育经历 / Education', key: 'education' },
-  { label: '工作经历 / Experience', key: 'experience' },
-  { label: '实习经历 / Internship', key: 'internship' },
-  { label: '项目经验 / Projects', key: 'projects' },
-  { label: '技能 / Skills', key: 'skills' },
-  { label: '语言 / Languages', key: 'languages' },
-  { label: '其他 / Other', key: 'other' },
-];
+// Section dropdown options: keys are stable storage IDs, labels flow through
+// i18n so the dropdown switches with uiLang. Resolved at render time, not
+// module load, because I18N may not have loaded its dictionaries yet here.
+function getResumeSectionOptions() {
+  return [
+    { key: 'basic', label: I18N.t('popup.section.basic') },
+    { key: 'intent', label: I18N.t('popup.section.intent') },
+    { key: 'education', label: I18N.t('popup.section.education') },
+    { key: 'experience', label: I18N.t('popup.section.experience') },
+    { key: 'internship', label: I18N.t('popup.section.internship') },
+    { key: 'projects', label: I18N.t('popup.section.projects') },
+    { key: 'skills', label: I18N.t('popup.section.skills') },
+    { key: 'languages', label: I18N.t('popup.section.languages') },
+    { key: 'other', label: I18N.t('popup.section.other') },
+  ];
+}
+
+// Serializes chrome.storage.local read-modify-write so two rapid clicks on
+// adjacent unmatched cards can't drop a write (the second get would otherwise
+// race the first set). All mutating writes from popup.js go through this.
+let _storageWriteChain = Promise.resolve();
+function mutateStorage(key, mutator) {
+  _storageWriteChain = _storageWriteChain.then(() => new Promise((resolve) => {
+    chrome.storage.local.get(key, (current) => {
+      const next = mutator(current[key]);
+      chrome.storage.local.set({ [key]: next }, resolve);
+    });
+  }));
+  return _storageWriteChain;
+}
 
 // 把字段标签+值保存到 customFields（独立于 resume，不覆盖任何已有内容）
 function saveCustomField(section, fieldLabel, value, btn, cardEl) {
-  chrome.storage.local.get('customFields', ({ customFields }) => {
-    const cf = customFields || {};
-    if (!cf[section]) cf[section] = {};
-    cf[section][fieldLabel] = value;
-    chrome.storage.local.set({ customFields: cf }, () => {
-      btn.textContent = I18N.t('popup.unmatched_saved');
-      btn.classList.add('saved');
-      // 短暂显示成功状态后，让卡片消失
+  mutateStorage('customFields', (cf) => {
+    const out = cf || {};
+    if (!out[section]) out[section] = {};
+    out[section][fieldLabel] = value;
+    return out;
+  }).then(() => {
+    btn.textContent = I18N.t('popup.unmatched_saved');
+    btn.classList.add('saved');
+    // 短暂显示成功状态后，让卡片消失
+    setTimeout(() => {
+      if (!cardEl) return;
+      cardEl.style.transition = 'opacity 0.24s ease, transform 0.24s ease';
+      cardEl.style.opacity = '0';
+      cardEl.style.transform = 'scale(0.95)';
       setTimeout(() => {
-        if (!cardEl) return;
-        cardEl.style.transition = 'opacity 0.24s ease, transform 0.24s ease';
-        cardEl.style.opacity = '0';
-        cardEl.style.transform = 'scale(0.95)';
-        setTimeout(() => {
-          cardEl.style.overflow = 'hidden';
-          cardEl.style.transition = 'max-height 0.26s ease, margin-top 0.26s ease, padding 0.26s ease';
-          cardEl.style.maxHeight = cardEl.offsetHeight + 'px';
-          requestAnimationFrame(() => {
-            cardEl.style.maxHeight = '0';
-            cardEl.style.marginTop = '0';
-            cardEl.style.paddingTop = '0';
-            cardEl.style.paddingBottom = '0';
-          });
-          setTimeout(() => cardEl.remove(), 280);
-        }, 240);
-      }, 700);
-    });
+        cardEl.style.overflow = 'hidden';
+        cardEl.style.transition = 'max-height 0.26s ease, margin-top 0.26s ease, padding 0.26s ease';
+        cardEl.style.maxHeight = cardEl.offsetHeight + 'px';
+        requestAnimationFrame(() => {
+          cardEl.style.maxHeight = '0';
+          cardEl.style.marginTop = '0';
+          cardEl.style.paddingTop = '0';
+          cardEl.style.paddingBottom = '0';
+        });
+        setTimeout(() => cardEl.remove(), 280);
+      }, 240);
+    }, 700);
   });
 }
 
@@ -75,7 +94,7 @@ function buildUnmatchedItem(item) {
 
   const select = document.createElement('select');
   select.className = 'unmatched-select';
-  RESUME_SECTION_OPTIONS.forEach(opt => {
+  getResumeSectionOptions().forEach(opt => {
     const option = document.createElement('option');
     option.value = opt.key;
     option.textContent = opt.label;
@@ -159,12 +178,12 @@ function buildUnmatchedItem(item) {
 }
 
 function saveLabelMapping(label, resumeKey, done) {
-  chrome.storage.local.get('labelMappings', ({ labelMappings }) => {
-    const lm = labelMappings || {};
-    lm[label] = resumeKey;
-    chrome.storage.local.set({ labelMappings: lm }, () => {
-      if (typeof done === 'function') done();
-    });
+  mutateStorage('labelMappings', (lm) => {
+    const out = lm || {};
+    out[label] = resumeKey;
+    return out;
+  }).then(() => {
+    if (typeof done === 'function') done();
   });
 }
 
