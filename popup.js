@@ -1,9 +1,54 @@
 const I18N = window.ResumeFillerI18n;
 const LC = window.ResumeFillerLabelClassifier;
+const PROFILES = window.ResumeFillerProfiles;
 
 // Cached after the most recent fill so the AI takeover button can re-issue
 // the same fill with aiTakeover: true (no new user click needed).
 let lastFillManual = [];
+
+// In-memory cache of the multi-profile store. Refreshed on load and after
+// every save; the dropdown + summary card read from this. The source of
+// truth still lives in chrome.storage.local under the `resumes` key.
+let profileStore = PROFILES.emptyStore();
+
+// Reads `resumes` (the new shape) and, if absent, migrates the legacy
+// single-resume key in-place. The callback receives the store; second arg
+// `didMigrate` lets the caller know it can clean up old state.
+function loadProfileStore(cb) {
+  chrome.storage.local.get(['resumes', 'resume'], ({ resumes, resume }) => {
+    if (resumes && resumes.profiles) {
+      cb(resumes, false);
+      return;
+    }
+    if (resume && typeof resume === 'object') {
+      const migrated = PROFILES.migrateLegacyResume(resume);
+      chrome.storage.local.set({ resumes: migrated }, () => {
+        chrome.storage.local.remove('resume', () => cb(migrated, true));
+      });
+      return;
+    }
+    cb(PROFILES.emptyStore(), false);
+  });
+}
+
+function saveProfileStore(store, cb) {
+  profileStore = store;
+  // Routes through the same Promise chain as customFields/labelMappings so
+  // a rapid duplicate → rename sequence can't interleave reads and writes
+  // (each write awaits the previous one to land).
+  _storageWriteChain = _storageWriteChain.then(() => new Promise((resolve) => {
+    chrome.storage.local.set({ resumes: store }, () => {
+      if (cb) cb();
+      resolve();
+    });
+  }));
+  return _storageWriteChain;
+}
+
+function getActiveResume() {
+  const active = PROFILES.getActiveProfile(profileStore);
+  return active ? active.data : null;
+}
 
 // ─── 未匹配字段 → 板块映射（新增，不覆盖现有内容）────────────────────────────
 
@@ -209,13 +254,14 @@ async function handleAiTakeover() {
   btn.disabled = true;
   btn.textContent = I18N.t('popup.ai_takeover_running');
 
-  chrome.storage.local.get(['resume', 'customFields'], ({ resume, customFields }) => {
-    if (!resume) {
-      btn.disabled = false;
-      btn.textContent = originalText;
-      showStatus('warn', I18N.t('popup.status_no_resume'));
-      return;
-    }
+  const resume = getActiveResume();
+  if (!resume) {
+    btn.disabled = false;
+    btn.textContent = originalText;
+    showStatus('warn', I18N.t('popup.status_no_resume'));
+    return;
+  }
+  chrome.storage.local.get('customFields', ({ customFields }) => {
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
       chrome.tabs.sendMessage(
         tab.id,
@@ -434,7 +480,42 @@ function showFillScreen(resume) {
   });
 
   document.getElementById('fillBtn').textContent = defaultFillButtonText();
+  renderProfileStrip();
   showScreen('fill');
+}
+
+// Populates the popup-top profile dropdown from the current store. Hidden
+// when there's only one profile so the strip doesn't add chrome for the
+// single-resume case — the dropdown only earns its keep once the user has
+// more than one variant.
+function renderProfileStrip() {
+  const strip = document.getElementById('profileStrip');
+  const select = document.getElementById('profileSelect');
+  if (!strip || !select) return;
+  const list = PROFILES.listProfiles(profileStore);
+  if (list.length <= 1) {
+    strip.style.display = 'none';
+    return;
+  }
+  strip.style.display = 'flex';
+  select.innerHTML = '';
+  list.forEach((profile) => {
+    const opt = document.createElement('option');
+    opt.value = profile.id;
+    opt.textContent = profile.name;
+    if (profile.id === profileStore.activeProfileId) opt.selected = true;
+    select.appendChild(opt);
+  });
+}
+
+function handleProfileSwitch(event) {
+  const newId = event.target.value;
+  if (!newId || newId === profileStore.activeProfileId) return;
+  const next = PROFILES.setActiveProfile(profileStore, newId);
+  saveProfileStore(next, () => {
+    const active = PROFILES.getActiveProfile(profileStore);
+    if (active && active.data) showFillScreen(active.data);
+  });
 }
 
 function escapeHtml(str) {
@@ -490,7 +571,17 @@ document.getElementById('importBtn').addEventListener('click', () => {
   }
 
   const resume = window.normalizeResume(data);
-  chrome.storage.local.set({ resume }, () => {
+  // Imported JSON replaces the active profile's data when there is one,
+  // otherwise creates a fresh profile (auto-named from intent.apply_position
+  // when present, else "Resume N").
+  let nextStore;
+  if (profileStore.activeProfileId && profileStore.profiles[profileStore.activeProfileId]) {
+    nextStore = PROFILES.updateProfileData(profileStore, profileStore.activeProfileId, resume);
+  } else {
+    const inferred = PROFILES.inferProfileName(resume);
+    nextStore = PROFILES.createProfile(profileStore, inferred || '', resume);
+  }
+  saveProfileStore(nextStore, () => {
     hint.className = 'hint ok';
     hint.textContent = I18N.t('popup.import_ok');
     setTimeout(() => {
@@ -510,16 +601,17 @@ document.getElementById('reimport').addEventListener('click', () => {
 });
 
 document.getElementById('fillBtn').addEventListener('click', () => {
-  chrome.storage.local.get(['resume', 'customFields'], ({ resume, customFields }) => {
-    if (!resume || !window.isResumeFilled(resume)) {
-      showStatus('warn', I18N.t('popup.status_no_resume'));
-      return;
-    }
+  const resume = getActiveResume();
+  if (!resume || !window.isResumeFilled(resume)) {
+    showStatus('warn', I18N.t('popup.status_no_resume'));
+    return;
+  }
 
-    const btn = document.getElementById('fillBtn');
-    btn.disabled = true;
-    btn.textContent = I18N.t('popup.fill_loading');
+  const btn = document.getElementById('fillBtn');
+  btn.disabled = true;
+  btn.textContent = I18N.t('popup.fill_loading');
 
+  chrome.storage.local.get('customFields', ({ customFields }) => {
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
       chrome.tabs.sendMessage(tab.id, { action: 'fill', resume, customFields: customFields || {} }, (response) => {
         btn.disabled = false;
@@ -542,6 +634,8 @@ document.getElementById('fillBtn').addEventListener('click', () => {
   });
 });
 
+document.getElementById('profileSelect').addEventListener('change', handleProfileSwitch);
+
 document.getElementById('aiTakeoverBtn').addEventListener('click', handleAiTakeover);
 
 window.addEventListener('resumefiller:languagechange', () => {
@@ -558,9 +652,11 @@ I18N.init().then(() => {
   setPromptText();
   updateStep1State();
 
-  chrome.storage.local.get('resume', ({ resume }) => {
-    if (resume && window.isResumeFilled(resume)) {
-      showFillScreen(resume);
+  loadProfileStore((store) => {
+    profileStore = store;
+    const active = PROFILES.getActiveProfile(store);
+    if (active && active.data && window.isResumeFilled(active.data)) {
+      showFillScreen(active.data);
     } else {
       showScreen('intro');
     }

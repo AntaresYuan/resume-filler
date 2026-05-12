@@ -67,6 +67,7 @@ const ResumeFillerI18n = (() => {
       'popup.unmatched_skip': '跳过',
       'popup.unmatched_map_label': '永久映射到：',
       'popup.unmatched_map_choose': '选择简历字段...',
+      'popup.profile_active': '使用简历',
       'popup.section.basic': '基本信息',
       'popup.section.intent': '求职意向',
       'popup.section.education': '教育',
@@ -237,7 +238,15 @@ const ResumeFillerI18n = (() => {
       'validation.email_format': '邮箱格式不正确',
       'validation.phone_format': '手机号格式不正确',
       'validation.url_format': '链接格式不正确',
-      'validation.banner_title': '已保存。还有 {count} 个字段格式有问题需要修复：'
+      'validation.banner_title': '已保存。还有 {count} 个字段格式有问题需要修复：',
+
+      'options.profile_name_label': '简历名称',
+      'options.profile_duplicate': '复制为新',
+      'options.profile_delete': '删除此简历',
+      'options.profile_delete_confirm': '删除「{name}」？此操作不可撤销。',
+      'options.profile_duplicated': '已复制为新简历',
+      'options.profile_deleted': '已删除',
+      'options.profile_renamed': '已重命名'
     },
     en: {
       'common.lang_toggle': '中文',
@@ -302,6 +311,7 @@ const ResumeFillerI18n = (() => {
       'popup.unmatched_skip': 'Skip',
       'popup.unmatched_map_label': 'Permanently map to:',
       'popup.unmatched_map_choose': 'Choose resume field...',
+      'popup.profile_active': 'Active resume',
       'popup.section.basic': 'Basic Info',
       'popup.section.intent': 'Job Target',
       'popup.section.education': 'Education',
@@ -472,7 +482,15 @@ const ResumeFillerI18n = (() => {
       'validation.email_format': 'Invalid email format',
       'validation.phone_format': 'Invalid phone format',
       'validation.url_format': 'Invalid URL format',
-      'validation.banner_title': 'Saved. {count} field(s) still need format fixes:'
+      'validation.banner_title': 'Saved. {count} field(s) still need format fixes:',
+
+      'options.profile_name_label': 'Resume name',
+      'options.profile_duplicate': 'Duplicate as new',
+      'options.profile_delete': 'Delete this resume',
+      'options.profile_delete_confirm': "Delete '{name}'? This can't be undone.",
+      'options.profile_duplicated': 'Duplicated as new resume',
+      'options.profile_deleted': 'Deleted',
+      'options.profile_renamed': 'Renamed'
     }
   };
 

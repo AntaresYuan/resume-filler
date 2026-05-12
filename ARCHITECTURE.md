@@ -113,11 +113,14 @@ This whole subsystem will be extracted to `lib/field-detect.js` in #3 to make it
 
 | Key | Shape | Written by | Read by |
 |---|---|---|---|
-| `resume` | `ResumeData` (see `RESUME_SCHEMA` in `schema.js`) | popup.js, options.js | popup.js (fill), options.js (editor) |
-| `customFields` | `{ [section]: { [label]: value } }` — user-confirmed label→value mappings from step 3 | popup.js, options.js | popup.js (sends to content.js), options.js (editor) |
+| `resumes` | `{ profiles: { [id]: { id, name, data: ResumeData } }, activeProfileId: string }` — multi-resume store introduced in #14 | popup.js, options.js | popup.js (fill — uses active profile), options.js (editor — edits active profile) |
+| `resume` (legacy) | `ResumeData` — pre-#14 single-resume shape. Auto-migrated into `resumes` on first load by popup or options, then removed. Never written after migration. | (none, post-migration) | (migration path only) |
+| `customFields` | `{ [section]: { [label]: value } }` — user-confirmed label→value mappings from step 3. Currently global (not per-profile). | popup.js, options.js | popup.js (sends to content.js), options.js (editor) |
+| `labelMappings` | `{ [label]: resumeKey }` — user-confirmed label→resume-field mappings from step 3 (added in #10). Currently global. | popup.js | content.js (Phase 7) |
 | `uiLang` | `"zh" \| "en"` | i18n.js | i18n.js |
+| `aiSettings` | `{ enabled, provider, apiKey, model }` (#8) | options.js | popup.js, content.js |
 
-There is currently no schema versioning beyond `RESUME_SCHEMA.version = 1`. Versioned migration arrives in #7 (required before Chrome Web Store launch so existing users survive future field changes).
+`RESUME_SCHEMA.version` (the in-resume schema) is at v2 with a migration registry in `schema.js` that ran v1→v2 to backfill `englishName` / `chineseName`. The multi-resume store shape is a separate, one-shot storage-key migration (`resume` → `resumes`) handled by `loadProfileStore` in popup.js and options.js; both surfaces are race-safe because `migrateLegacyResume` uses a deterministic profile id (`p_migrated`).
 
 ## Key invariants
 

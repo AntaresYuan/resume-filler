@@ -1,6 +1,120 @@
 const I18N = window.ResumeFillerI18n;
 const V = window.ResumeFillerValidators;
+const PROFILES = window.ResumeFillerProfiles;
 let state = window.emptyResume();
+
+// In-memory copy of the multi-profile store. `state` (above) always points
+// at the currently-active profile's data. Saving persists both: state into
+// the active profile, then the whole store back to chrome.storage.local
+// under `resumes`.
+let profileStore = PROFILES.emptyStore();
+
+// Reads `resumes` (the new shape) and migrates the legacy single-resume
+// key in place if it's the only thing present. Mirrors popup.js's helper
+// — both surfaces need to handle a cold-start with v2.x data.
+function loadProfileStore(cb) {
+  chrome.storage.local.get(['resumes', 'resume'], ({ resumes, resume }) => {
+    if (resumes && resumes.profiles) {
+      cb(resumes);
+      return;
+    }
+    if (resume && typeof resume === 'object') {
+      const migrated = PROFILES.migrateLegacyResume(resume);
+      chrome.storage.local.set({ resumes: migrated }, () => {
+        chrome.storage.local.remove('resume', () => cb(migrated));
+      });
+      return;
+    }
+    cb(PROFILES.emptyStore());
+  });
+}
+
+// Mirrors popup.js's serialization: rapid duplicate → rename in the profile
+// bar can interleave reads and writes if these calls run as plain async
+// fire-and-forget. Chaining on a per-surface Promise queue keeps every
+// chrome.storage.local.set ordered.
+let _storageWriteChain = Promise.resolve();
+function saveProfileStore(store, cb) {
+  profileStore = store;
+  _storageWriteChain = _storageWriteChain.then(() => new Promise((resolve) => {
+    chrome.storage.local.set({ resumes: store }, () => {
+      if (cb) cb();
+      resolve();
+    });
+  }));
+  return _storageWriteChain;
+}
+
+// Refreshes the rename input + delete button enabled-state. Called whenever
+// the active profile changes or the store is reloaded. The delete button
+// stays disabled when there's only one profile so users can't accidentally
+// wipe themselves into the empty-state path.
+function renderProfileBar() {
+  const input = document.getElementById('profileNameInput');
+  const delBtn = document.getElementById('btnProfileDelete');
+  const active = PROFILES.getActiveProfile(profileStore);
+  if (!input || !delBtn) return;
+  input.value = active ? active.name : '';
+  const count = Object.keys(profileStore.profiles || {}).length;
+  delBtn.disabled = count <= 1;
+  delBtn.style.opacity = count <= 1 ? '0.4' : '';
+  delBtn.style.cursor = count <= 1 ? 'not-allowed' : '';
+}
+
+function commitProfileRename() {
+  const input = document.getElementById('profileNameInput');
+  if (!input) return;
+  const active = PROFILES.getActiveProfile(profileStore);
+  if (!active) return;
+  const next = PROFILES.renameProfile(profileStore, active.id, input.value);
+  if (next === profileStore) {
+    // Empty/whitespace name was rejected — restore the input to current name.
+    input.value = active.name;
+    return;
+  }
+  saveProfileStore(next, () => {
+    renderProfileBar();
+    toast(I18N.t('options.profile_renamed'), 'success');
+  });
+}
+
+function handleProfileDuplicate() {
+  const active = PROFILES.getActiveProfile(profileStore);
+  if (!active) return;
+  // Source keeps its last-saved data untouched. The duplicate is seeded
+  // from the source's stored data, then the editor's current edits
+  // (including unsaved ones) are written into the duplicate only — this
+  // matches the common "I want a copy of what I'm working on" intent
+  // without silently committing edits back to the original.
+  collectFlatFields();
+  const normalized = window.normalizeResume(state);
+  let store = PROFILES.duplicateProfile(profileStore, active.id);
+  const newId = store.activeProfileId;
+  store = PROFILES.updateProfileData(store, newId, normalized);
+  saveProfileStore(store, () => {
+    const newActive = PROFILES.getActiveProfile(profileStore);
+    state = newActive ? window.normalizeResume(newActive.data || window.emptyResume()) : window.emptyResume();
+    hydrate();
+    renderProfileBar();
+    toast(I18N.t('options.profile_duplicated'), 'success');
+  });
+}
+
+function handleProfileDelete() {
+  const active = PROFILES.getActiveProfile(profileStore);
+  if (!active) return;
+  const count = Object.keys(profileStore.profiles || {}).length;
+  if (count <= 1) return;
+  if (!confirm(I18N.t('options.profile_delete_confirm', { name: active.name }))) return;
+  const store = PROFILES.deleteProfile(profileStore, active.id);
+  saveProfileStore(store, () => {
+    const newActive = PROFILES.getActiveProfile(profileStore);
+    state = newActive ? window.normalizeResume(newActive.data || window.emptyResume()) : window.emptyResume();
+    hydrate();
+    renderProfileBar();
+    toast(I18N.t('options.profile_deleted'), 'success');
+  });
+}
 
 // Section + field combinations that have format validation. Map (section,
 // key) → i18n label key, so the save-time banner can render
@@ -446,9 +560,21 @@ function save() {
   const resume = window.normalizeResume(state);
   state = resume;
 
+  // Persist into the active profile inside the multi-resume store. If no
+  // profile exists yet (e.g. first ever open of the options page with no
+  // legacy resume), create one named from intent.apply_position.
+  const active = PROFILES.getActiveProfile(profileStore);
+  let nextStore;
+  if (active) {
+    nextStore = PROFILES.updateProfileData(profileStore, active.id, resume);
+  } else {
+    const inferred = PROFILES.inferProfileName(resume);
+    nextStore = PROFILES.createProfile(profileStore, inferred || '', resume);
+  }
+
   // Non-blocking: persist first, then surface issues. Users can save a
   // draft with format errors (acceptance criterion in #11).
-  chrome.storage.local.set({ resume }, () => {
+  saveProfileStore(nextStore, () => {
     const btn = document.getElementById('btn-save');
     const defaultText = I18N.t('options.btn_save');
     btn.textContent = I18N.t('options.saved');
@@ -457,6 +583,7 @@ function save() {
       btn.textContent = defaultText;
       btn.classList.remove('saved');
     }, 1600);
+    renderProfileBar();
     const issues = V.validateResume(resume);
     renderValidationBanner(issues);
     if (issues.length === 0) {
@@ -576,13 +703,28 @@ bindTagInput('skills', 'skills-editor', 'skills-input');
 bindTagInput('languages', 'languages-editor', 'languages-input');
 
 I18N.init().then(() => {
-  chrome.storage.local.get(['resume', 'customFields'], ({ resume, customFields }) => {
-    state = resume ? window.normalizeResume(resume) : window.emptyResume();
+  loadProfileStore((store) => {
+    profileStore = store;
+    const active = PROFILES.getActiveProfile(store);
+    state = active && active.data ? window.normalizeResume(active.data) : window.emptyResume();
     hydrate();
     initStaticFieldValidation();
-    renderCustomFields(customFields || {});
+    renderProfileBar();
+    chrome.storage.local.get('customFields', ({ customFields }) => {
+      renderCustomFields(customFields || {});
+    });
   });
   initAiSettings();
+});
+
+document.getElementById('btnProfileDuplicate').addEventListener('click', handleProfileDuplicate);
+document.getElementById('btnProfileDelete').addEventListener('click', handleProfileDelete);
+document.getElementById('profileNameInput').addEventListener('blur', commitProfileRename);
+document.getElementById('profileNameInput').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    event.target.blur();
+  }
 });
 
 // ─── AI settings (issue #8) ─────────────────────────────────────────────
