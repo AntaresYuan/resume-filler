@@ -3,15 +3,17 @@ require("../lib/llm-providers.js");
 const LP = window.ResumeFillerLLMProviders;
 
 describe("listProviders / getProvider", () => {
-  test("lists the four expected providers", () => {
+  test("lists the five expected providers", () => {
     const ids = LP.listProviders().map((p) => p.id).sort();
-    expect(ids).toEqual(["anthropic", "custom", "doubao", "openai"]);
+    expect(ids).toEqual(["anthropic", "custom", "deepseek", "doubao", "openai"]);
   });
 
   test("getProvider returns the provider object by id", () => {
     expect(LP.getProvider("openai").name).toBe("OpenAI");
     expect(LP.getProvider("anthropic").defaultModel).toMatch(/claude/);
     expect(LP.getProvider("doubao").defaultEndpoint).toMatch(/volces\.com/);
+    expect(LP.getProvider("deepseek").defaultEndpoint).toMatch(/deepseek\.com/);
+    expect(LP.getProvider("deepseek").defaultModel).toBe("deepseek-chat");
   });
 
   test("getProvider returns null for unknown id", () => {
@@ -36,6 +38,20 @@ describe("Header building per provider", () => {
   test("Doubao uses Bearer (OpenAI-compatible)", () => {
     const h = LP.getProvider("doubao").buildHeaders("DOUBAO_KEY");
     expect(h.Authorization).toBe("Bearer DOUBAO_KEY");
+  });
+
+  test("DeepSeek uses Bearer (OpenAI-compatible)", () => {
+    const h = LP.getProvider("deepseek").buildHeaders("sk-deepseek");
+    expect(h.Authorization).toBe("Bearer sk-deepseek");
+    expect(h["Content-Type"]).toBe("application/json");
+  });
+
+  test("DeepSeek test body uses default model when none provided", () => {
+    const provider = LP.getProvider("deepseek");
+    const body = provider.buildTestBody("");
+    expect(body.model).toBe("deepseek-chat");
+    expect(body.max_tokens).toBe(1);
+    expect(body.messages[0].content).toBe("ping");
   });
 });
 
