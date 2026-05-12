@@ -355,6 +355,43 @@ body {
 }
 .validation-banner li { margin-top: 2px; }
 
+.profile-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: 0 6px 14px rgba(40, 58, 109, 0.05);
+  flex-wrap: wrap;
+}
+.profile-bar-label {
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9ba2b4;
+  font-weight: 800;
+}
+.profile-name-input {
+  flex: 1;
+  min-width: 160px;
+  border: 1px solid var(--line);
+  background: #fbfcff;
+  border-radius: 14px;
+  padding: 9px 13px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text);
+  outline: none;
+}
+.profile-name-input:focus {
+  border-color: #cad4e8;
+  box-shadow: 0 0 0 4px rgba(221, 230, 243, 0.55);
+}
+.profile-bar .mini-btn { white-space: nowrap; }
+
 .card {
   border-radius: 22px;
   border: 1px solid var(--line);
@@ -618,6 +655,13 @@ body {
   </div>
 
   <div class="editor-sheet">
+    <div class="profile-bar" id="profileBar">
+      <span class="profile-bar-label" data-i18n="options.profile_name_label">简历名称</span>
+      <input type="text" class="profile-name-input" id="profileNameInput" autocomplete="off">
+      <button class="mini-btn" type="button" id="btnProfileDuplicate" data-i18n="options.profile_duplicate">复制为新</button>
+      <button class="mini-btn danger" type="button" id="btnProfileDelete" data-i18n="options.profile_delete">删除此简历</button>
+    </div>
+
     <div class="hint-banner" data-i18n-html="options.hint_html">多段经历按时间倒序排列（<b>最近的放第一条</b>），填表时会优先使用第一条。字段留空没关系，填表时会自动跳过。</div>
 
     <div class="validation-banner" id="validationBanner" role="alert" aria-live="polite"></div>
@@ -1005,6 +1049,7 @@ body {
 <script src="schema.js"></script>
 <script src="lib/llm-providers.js"></script>
 <script src="lib/validators.js"></script>
+<script src="lib/profiles.js"></script>
 <script src="i18n.js"></script>
 <script src="options.js"></script>
 </body>
