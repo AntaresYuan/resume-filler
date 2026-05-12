@@ -615,6 +615,11 @@ function exportJson() {
 function openImport() {
   document.getElementById('importText').value = '';
   document.getElementById('importErr').textContent = '';
+  // Reset the "import as new" toggle so reopening the modal always
+  // starts from the safe default (replace current). Users tick it
+  // intentionally for each multi-resume add.
+  const asNewBox = document.getElementById('importAsNew');
+  if (asNewBox) asNewBox.checked = false;
   document.getElementById('importModal').classList.add('open');
   setTimeout(() => document.getElementById('importText').focus(), 40);
 }
@@ -641,7 +646,30 @@ function doImport() {
     return;
   }
 
-  state = window.normalizeResume(parsed);
+  const normalized = window.normalizeResume(parsed);
+  state = normalized;
+
+  // "Import as new" creates a fresh profile, switches active to it, and
+  // persists immediately so the new profile is visible in the popup
+  // dropdown without requiring a Save click. The editor is re-hydrated
+  // from the new active profile (which holds the just-parsed data).
+  const asNewBox = document.getElementById('importAsNew');
+  if (asNewBox && asNewBox.checked) {
+    const inferred = PROFILES.inferProfileName(normalized);
+    let store = PROFILES.createProfile(profileStore, inferred || '', normalized);
+    // createProfile preserves an already-valid active id; re-anchor to
+    // the newly-created profile so subsequent saves target it.
+    const newId = Object.keys(store.profiles).find((id) => !profileStore.profiles[id]);
+    if (newId) store = PROFILES.setActiveProfile(store, newId);
+    saveProfileStore(store, () => {
+      hydrate();
+      renderProfileBar();
+      closeImport();
+      toast(I18N.t('options.toast_imported'), 'success');
+    });
+    return;
+  }
+
   hydrate();
   closeImport();
   toast(I18N.t('options.toast_imported'), 'success');

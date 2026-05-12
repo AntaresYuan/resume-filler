@@ -68,6 +68,7 @@ const ResumeFillerI18n = (() => {
       'popup.unmatched_map_label': '永久映射到：',
       'popup.unmatched_map_choose': '选择简历字段...',
       'popup.profile_active': '使用简历',
+      'popup.import_new': '导入新简历',
       'popup.section.basic': '基本信息',
       'popup.section.intent': '求职意向',
       'popup.section.education': '教育',
@@ -246,7 +247,8 @@ const ResumeFillerI18n = (() => {
       'options.profile_delete_confirm': '删除「{name}」？此操作不可撤销。',
       'options.profile_duplicated': '已复制为新简历',
       'options.profile_deleted': '已删除',
-      'options.profile_renamed': '已重命名'
+      'options.profile_renamed': '已重命名',
+      'options.import_as_new': '作为新简历导入（保留当前这份）'
     },
     en: {
       'common.lang_toggle': '中文',
@@ -312,6 +314,7 @@ const ResumeFillerI18n = (() => {
       'popup.unmatched_map_label': 'Permanently map to:',
       'popup.unmatched_map_choose': 'Choose resume field...',
       'popup.profile_active': 'Active resume',
+      'popup.import_new': 'Import new resume',
       'popup.section.basic': 'Basic Info',
       'popup.section.intent': 'Job Target',
       'popup.section.education': 'Education',
@@ -490,7 +493,8 @@ const ResumeFillerI18n = (() => {
       'options.profile_delete_confirm': "Delete '{name}'? This can't be undone.",
       'options.profile_duplicated': 'Duplicated as new resume',
       'options.profile_deleted': 'Deleted',
-      'options.profile_renamed': 'Renamed'
+      'options.profile_renamed': 'Renamed',
+      'options.import_as_new': "Save as a new resume (don't replace current)"
     }
   };
 

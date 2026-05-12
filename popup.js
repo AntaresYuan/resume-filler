@@ -11,6 +11,14 @@ let lastFillManual = [];
 // truth still lives in chrome.storage.local under the `resumes` key.
 let profileStore = PROFILES.emptyStore();
 
+// Tracks how the next step-2 paste should be applied: 'replace' updates
+// the active profile's data (re-pasting a corrected JSON for the same
+// resume), 'new' creates a fresh profile and switches active to it
+// (uploading a second resume variant). The two footer links each set
+// this before showing step 2, so the paste handler doesn't have to
+// inspect button-specific state.
+let importIntent = 'replace';
+
 // Reads `resumes` (the new shape) and, if absent, migrates the legacy
 // single-resume key in-place. The callback receives the store; second arg
 // `didMigrate` lets the caller know it can clean up old state.
@@ -571,16 +579,27 @@ document.getElementById('importBtn').addEventListener('click', () => {
   }
 
   const resume = window.normalizeResume(data);
-  // Imported JSON replaces the active profile's data when there is one,
-  // otherwise creates a fresh profile (auto-named from intent.apply_position
-  // when present, else "Resume N").
+  // Three cases, in order:
+  // - 'new' intent: create a new profile and explicitly switch active to
+  //   it so subsequent Fill / Save target the just-imported resume.
+  // - active profile exists + 'replace' intent: update the active profile's
+  //   data in place (common re-paste-corrected-JSON flow).
+  // - no active profile: create one (first-time onboarding).
   let nextStore;
-  if (profileStore.activeProfileId && profileStore.profiles[profileStore.activeProfileId]) {
-    nextStore = PROFILES.updateProfileData(profileStore, profileStore.activeProfileId, resume);
-  } else {
+  const hasActive = profileStore.activeProfileId && profileStore.profiles[profileStore.activeProfileId];
+  if (importIntent === 'new' || !hasActive) {
     const inferred = PROFILES.inferProfileName(resume);
     nextStore = PROFILES.createProfile(profileStore, inferred || '', resume);
+    // createProfile preserves an already-valid active id, so we re-anchor
+    // here. The new id is whichever key wasn't in the prior store.
+    const newId = Object.keys(nextStore.profiles).find((id) => !profileStore.profiles[id]);
+    if (newId) nextStore = PROFILES.setActiveProfile(nextStore, newId);
+  } else {
+    nextStore = PROFILES.updateProfileData(profileStore, profileStore.activeProfileId, resume);
   }
+  // Reset intent so the next entry to step 2 (e.g. via re-import link)
+  // starts from the safe default.
+  importIntent = 'replace';
   saveProfileStore(nextStore, () => {
     hint.className = 'hint ok';
     hint.textContent = I18N.t('popup.import_ok');
@@ -597,6 +616,12 @@ document.getElementById('openEditor').addEventListener('click', () => {
 
 document.getElementById('reimport').addEventListener('click', () => {
   if (!confirm(I18N.t('popup.reimport_confirm'))) return;
+  importIntent = 'replace';
+  showScreen('step2');
+});
+
+document.getElementById('importNew').addEventListener('click', () => {
+  importIntent = 'new';
   showScreen('step2');
 });
 
