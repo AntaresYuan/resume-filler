@@ -315,6 +315,46 @@ body {
 
 .field textarea { min-height: 88px; }
 
+.field input.invalid,
+.field textarea.invalid {
+  border-color: #d94f4f;
+  background: #fff6f6;
+}
+.field input.invalid:focus,
+.field textarea.invalid:focus {
+  box-shadow: 0 0 0 4px rgba(217, 79, 79, 0.18);
+}
+
+.field-error {
+  display: block;
+  color: #b53d3d;
+  font-size: 11px;
+  margin-top: 5px;
+  letter-spacing: 0.02em;
+  font-weight: 600;
+}
+
+.validation-banner {
+  display: none;
+  border-radius: 22px;
+  padding: 14px 18px;
+  background: #fdecec;
+  border: 1px solid #f3c8c8;
+  color: #8a2424;
+  font-size: 13px;
+  margin-bottom: 18px;
+}
+.validation-banner.show { display: block; }
+.validation-banner-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.validation-banner ul {
+  margin: 0;
+  padding-left: 20px;
+}
+.validation-banner li { margin-top: 2px; }
+
 .card {
   border-radius: 22px;
   border: 1px solid var(--line);
@@ -540,6 +580,7 @@ body {
 }
 .toast.show { display: block; }
 .toast.success { background: #4b8669; }
+.toast.warn { background: #b06f3a; }
 
 @media (max-width: 900px) {
   body { padding: 12px; }
@@ -578,6 +619,8 @@ body {
 
   <div class="editor-sheet">
     <div class="hint-banner" data-i18n-html="options.hint_html">多段经历按时间倒序排列（<b>最近的放第一条</b>），填表时会优先使用第一条。字段留空没关系，填表时会自动跳过。</div>
+
+    <div class="validation-banner" id="validationBanner" role="alert" aria-live="polite"></div>
 
     <div class="sections">
       <div class="section s-blue">
@@ -961,6 +1004,7 @@ body {
 
 <script src="schema.js"></script>
 <script src="lib/llm-providers.js"></script>
+<script src="lib/validators.js"></script>
 <script src="i18n.js"></script>
 <script src="options.js"></script>
 </body>
