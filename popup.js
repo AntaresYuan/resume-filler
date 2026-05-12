@@ -539,6 +539,10 @@ document.getElementById('step1BackBtn').addEventListener('click', () => {
 });
 
 document.getElementById('step1NextBtn').addEventListener('click', () => {
+  // Onboarding flow defaults to replace semantics. Reset so a stale 'new'
+  // intent (left over from a prior aborted "Import new resume" click)
+  // can't bleed into this paste.
+  importIntent = 'replace';
   showScreen('step2');
 });
 
@@ -547,6 +551,9 @@ document.getElementById('step2BackBtn').addEventListener('click', () => {
 });
 
 document.getElementById('fillBackBtn').addEventListener('click', () => {
+  // Same reset rationale as step1NextBtn — both are entries to step 2 that
+  // bypass the two intent-setting links.
+  importIntent = 'replace';
   showScreen('step2');
 });
 

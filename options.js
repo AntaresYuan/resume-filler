@@ -619,9 +619,21 @@ function openImport() {
   // starts from the safe default (replace current). Users tick it
   // intentionally for each multi-resume add.
   const asNewBox = document.getElementById('importAsNew');
-  if (asNewBox) asNewBox.checked = false;
+  if (asNewBox) {
+    asNewBox.checked = false;
+    syncImportOkLabel();
+  }
   document.getElementById('importModal').classList.add('open');
   setTimeout(() => document.getElementById('importText').focus(), 40);
+}
+
+// Reflects the checkbox state on the import button label so the user
+// reads "Import & overwrite" or "Import as new" depending on intent.
+function syncImportOkLabel() {
+  const btn = document.getElementById('importOk');
+  const box = document.getElementById('importAsNew');
+  if (!btn || !box) return;
+  btn.textContent = I18N.t(box.checked ? 'options.import_modal_ok_new' : 'options.import_modal_ok');
 }
 
 function closeImport() {
@@ -691,6 +703,7 @@ document.getElementById('btn-export').addEventListener('click', exportJson);
 document.getElementById('btn-import').addEventListener('click', openImport);
 document.getElementById('importCancel').addEventListener('click', closeImport);
 document.getElementById('importOk').addEventListener('click', doImport);
+document.getElementById('importAsNew').addEventListener('change', syncImportOkLabel);
 document.getElementById('importModal').addEventListener('click', (event) => {
   if (event.target.id === 'importModal') closeImport();
 });
