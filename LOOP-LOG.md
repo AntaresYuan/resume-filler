@@ -34,3 +34,16 @@ Autonomous dev-loop run log. One entry per task completed by Claude Code via the
   - Banner doesn't auto-clear when user fixes errors mid-edit.
   - Inline `.field-error` spans aren't linked to inputs via `aria-describedby`.
   - Pre-existing (not from this PR): Chinese comments in `renderCustomFields`.
+
+---
+
+## 2026-05-12 · Loop paused for user decisions
+
+**Shipped in this run:** PR #25 (closes #10), PR #26 (closes #11). Queue exhausted of items that are clean autonomous candidates.
+
+**Remaining open issues, all needing user input before autonomous work can continue:**
+
+- **#14 Multi-resume support (P2, v2.6)** — Originally annotated "depends on #7" (schema migration framework). That dep is stale: `schema.js` already has a v1→v2 migration registry shipped, so adding v2→v3 is just a new entry. Real blocker is UX/product: where the "switch resume" dropdown lives (popup top? options page?), the popup indicator's design, default profile naming, and what "duplicate as new" copies. Once those are decided this is autonomous-doable.
+- **#13 Cover letter / long-form answer LLM draft (P1, v2.6)** — Big product feature: prompt design, where it lives in the UI, what the user inputs (job description? company? role?), how cost/safety are framed. Not a code task to start with.
+- **#12 Chrome Web Store launch package (P1, v2.5)** — Privacy policy, screenshots, store description, support email, icon assets — all user-side content authorship.
+- **#15 Error reporting + analytics (P2, v2.6)** — Needs an external endpoint (Sentry free tier or self-hosted Vercel function), and depends on #12 for the privacy-policy update. Endpoint setup + credential is the user's call.
