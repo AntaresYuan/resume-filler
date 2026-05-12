@@ -37,7 +37,39 @@ Autonomous dev-loop run log. One entry per task completed by Claude Code via the
 
 ---
 
-## 2026-05-12 · Loop paused for user decisions
+## 2026-05-12 · PR #27 — Multi-resume support: profiles, switcher, legacy migration (closes #14)
+
+- **Branch:** `feat/14-multi-resume` (squash-merged as `cda60a4`, branch deleted)
+- **Issue:** #14 (auto-closed via "Closes #14")
+- **Files:** `lib/profiles.js` (new, +163), `tests/profiles.test.js` (new, +284), `popup.js` (+134/-25), `options.js` (+150/-3), `popup.html` (+39), `options.html` (+45), `i18n.js` (+22), `ARCHITECTURE.md` (+9/-2). Total +846/-30 across 8 files.
+- **Decisions (taken at kickoff before coding):** switcher in popup top (A), default profile name from `intent.apply_position` fallback "Resume N" (B), duplicate-as-new copies full data (A). Side discovery: schema-migration framework (#7) already exists in `schema.js` at v2 — the issue annotation was stale, so this PR only added a one-shot storage-key migration (`resume` → `resumes`) on top.
+- **Behaviors:** new `resumes = { profiles, activeProfileId }` storage shape. Popup gets a profile dropdown in the fill screen (hidden when only one profile). Options gets a profile bar with rename / "duplicate as new" / "delete this resume" (delete disabled when only one remains). `content.js` is unchanged — popup keeps sending the active profile's `ResumeData` via `chrome.tabs.sendMessage`.
+- **Verification:** `npm run lint` clean, `npm test` 276/276 (was 237; +39 from the new profiles suite including determinism + orphan-active-id), `node -c` parse OK, CI green (12s + 11s).
+- **Sub-agent review:** flagged 3 P1 + 2 P2, all fixed in commit `c44d0f1`:
+  1. P1 dual-surface migration race → `migrateLegacyResume` now uses deterministic id `p_migrated`; concurrent migrations converge.
+  2. P1 `saveProfileStore` not serialized → routed through `_storageWriteChain` Promise queue in both surfaces.
+  3. P1 `handleProfileDuplicate` side effects → source profile no longer overwritten; the editor's current edits land in the duplicate only.
+  4. P2 orphan-active-id → `createProfile` re-anchors active to the new profile when current active is missing.
+  5. P2 misleading rename toast → added `options.profile_renamed` key.
+- **Follow-ups recorded (non-blocking, not opened as issues yet):**
+  - `loadProfileStore` is duplicated in popup.js and options.js. Worth extracting to `lib/profile-storage.js`.
+  - `customFields` and `labelMappings` are still global, not per-profile. Could be per-profile in a future iteration.
+  - If user is editing options and switches profile in popup, options shows stale data until refresh.
+  - Discoverability: the popup dropdown is hidden when only one profile exists. Users learn about multi-resume by going to options.
+
+---
+
+## 2026-05-12 · Loop complete
+
+**Total shipped in this run:** PR #25 (closes #10), PR #26 (closes #11), PR #27 (closes #14).
+
+**Test count:** 190 → 276 (+86 across label-classifier, validators, profiles, and follow-up cases).
+
+**Remaining open issues, all still blocked on user input:**
+
+- **#13 Cover letter / long-form answer LLM draft (P1, v2.6)** — needs prompt design, UI placement, cost/safety framing.
+- **#12 Chrome Web Store launch package (P1, v2.5)** — privacy policy, screenshots, store description, support email, icon assets.
+- **#15 Error reporting + anonymous usage analytics (P2, v2.6)** — needs external endpoint (Sentry / Vercel function) and depends on #12 privacy policy.
 
 **Shipped in this run:** PR #25 (closes #10), PR #26 (closes #11). Queue exhausted of items that are clean autonomous candidates.
 
