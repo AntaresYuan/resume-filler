@@ -615,8 +615,25 @@ function exportJson() {
 function openImport() {
   document.getElementById('importText').value = '';
   document.getElementById('importErr').textContent = '';
+  // Reset the "import as new" toggle so reopening the modal always
+  // starts from the safe default (replace current). Users tick it
+  // intentionally for each multi-resume add.
+  const asNewBox = document.getElementById('importAsNew');
+  if (asNewBox) {
+    asNewBox.checked = false;
+    syncImportOkLabel();
+  }
   document.getElementById('importModal').classList.add('open');
   setTimeout(() => document.getElementById('importText').focus(), 40);
+}
+
+// Reflects the checkbox state on the import button label so the user
+// reads "Import & overwrite" or "Import as new" depending on intent.
+function syncImportOkLabel() {
+  const btn = document.getElementById('importOk');
+  const box = document.getElementById('importAsNew');
+  if (!btn || !box) return;
+  btn.textContent = I18N.t(box.checked ? 'options.import_modal_ok_new' : 'options.import_modal_ok');
 }
 
 function closeImport() {
@@ -641,7 +658,30 @@ function doImport() {
     return;
   }
 
-  state = window.normalizeResume(parsed);
+  const normalized = window.normalizeResume(parsed);
+  state = normalized;
+
+  // "Import as new" creates a fresh profile, switches active to it, and
+  // persists immediately so the new profile is visible in the popup
+  // dropdown without requiring a Save click. The editor is re-hydrated
+  // from the new active profile (which holds the just-parsed data).
+  const asNewBox = document.getElementById('importAsNew');
+  if (asNewBox && asNewBox.checked) {
+    const inferred = PROFILES.inferProfileName(normalized);
+    let store = PROFILES.createProfile(profileStore, inferred || '', normalized);
+    // createProfile preserves an already-valid active id; re-anchor to
+    // the newly-created profile so subsequent saves target it.
+    const newId = Object.keys(store.profiles).find((id) => !profileStore.profiles[id]);
+    if (newId) store = PROFILES.setActiveProfile(store, newId);
+    saveProfileStore(store, () => {
+      hydrate();
+      renderProfileBar();
+      closeImport();
+      toast(I18N.t('options.toast_imported'), 'success');
+    });
+    return;
+  }
+
   hydrate();
   closeImport();
   toast(I18N.t('options.toast_imported'), 'success');
@@ -663,6 +703,7 @@ document.getElementById('btn-export').addEventListener('click', exportJson);
 document.getElementById('btn-import').addEventListener('click', openImport);
 document.getElementById('importCancel').addEventListener('click', closeImport);
 document.getElementById('importOk').addEventListener('click', doImport);
+document.getElementById('importAsNew').addEventListener('change', syncImportOkLabel);
 document.getElementById('importModal').addEventListener('click', (event) => {
   if (event.target.id === 'importModal') closeImport();
 });

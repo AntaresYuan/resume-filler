@@ -588,6 +588,20 @@ body {
   outline: none;
   resize: vertical;
 }
+.modal-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.modal-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
 .modal-error {
   font-size: 12px;
   color: #bf5555;
@@ -1036,6 +1050,10 @@ body {
     <h2 data-i18n="options.import_modal_title">从 JSON 导入</h2>
     <p data-i18n-html="options.import_modal_body">这会 <b>覆盖</b> 当前编辑器里的所有内容。如果只想备份，请先点“导出 JSON”。</p>
     <textarea id="importText" data-i18n-placeholder="options.import_modal_placeholder" placeholder='{&#10;  "version": 1,&#10;  "basic": { "name": "..." },&#10;  ...&#10;}'></textarea>
+    <label class="modal-checkbox">
+      <input type="checkbox" id="importAsNew">
+      <span data-i18n="options.import_as_new">作为新简历导入（保留当前这份）</span>
+    </label>
     <div class="modal-error" id="importErr"></div>
     <div class="modal-actions">
       <button class="pill-btn ghost" id="importCancel" data-i18n="options.import_modal_cancel">取消</button>

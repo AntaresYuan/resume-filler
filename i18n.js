@@ -54,7 +54,7 @@ const ResumeFillerI18n = (() => {
       'popup.import_empty': '请先粘贴 JSON 内容',
       'popup.import_error': 'JSON 格式错误：{message}',
       'popup.import_ok': '已导入，正在打开编辑器预览…',
-      'popup.reimport_confirm': '这会保留当前简历，但回到导入界面让你粘贴新 JSON 覆盖。继续？',
+      'popup.reimport_confirm': '这会用新粘贴的 JSON 覆盖当前简历。如果想保留这份、再加一份，请取消并改用「导入新简历」。继续？',
       'popup.status_no_resume': '请先导入简历 JSON',
       'popup.status_connect_error': '无法连接到页面，请刷新后重试',
       'popup.status_filled': '已自动填写 {count} 个字段',
@@ -68,6 +68,8 @@ const ResumeFillerI18n = (() => {
       'popup.unmatched_map_label': '永久映射到：',
       'popup.unmatched_map_choose': '选择简历字段...',
       'popup.profile_active': '使用简历',
+      'popup.import_new': '导入新简历',
+      'options.import_modal_ok_new': '导入为新简历',
       'popup.section.basic': '基本信息',
       'popup.section.intent': '求职意向',
       'popup.section.education': '教育',
@@ -246,7 +248,8 @@ const ResumeFillerI18n = (() => {
       'options.profile_delete_confirm': '删除「{name}」？此操作不可撤销。',
       'options.profile_duplicated': '已复制为新简历',
       'options.profile_deleted': '已删除',
-      'options.profile_renamed': '已重命名'
+      'options.profile_renamed': '已重命名',
+      'options.import_as_new': '作为新简历导入（保留当前这份）'
     },
     en: {
       'common.lang_toggle': '中文',
@@ -298,7 +301,7 @@ const ResumeFillerI18n = (() => {
       'popup.import_empty': 'Paste JSON first',
       'popup.import_error': 'Invalid JSON: {message}',
       'popup.import_ok': 'Imported. Opening the preview…',
-      'popup.reimport_confirm': 'This keeps your current resume until you paste a new JSON file over it. Continue?',
+      'popup.reimport_confirm': 'The pasted JSON will overwrite your current resume. To keep this one and add another, cancel and use "Import new resume" instead. Continue?',
       'popup.status_no_resume': 'Import a resume JSON first',
       'popup.status_connect_error': 'Could not connect to the page. Refresh and try again.',
       'popup.status_filled': 'Autofilled {count} fields',
@@ -312,6 +315,8 @@ const ResumeFillerI18n = (() => {
       'popup.unmatched_map_label': 'Permanently map to:',
       'popup.unmatched_map_choose': 'Choose resume field...',
       'popup.profile_active': 'Active resume',
+      'popup.import_new': 'Import new resume',
+      'options.import_modal_ok_new': 'Import as new resume',
       'popup.section.basic': 'Basic Info',
       'popup.section.intent': 'Job Target',
       'popup.section.education': 'Education',
@@ -490,7 +495,8 @@ const ResumeFillerI18n = (() => {
       'options.profile_delete_confirm': "Delete '{name}'? This can't be undone.",
       'options.profile_duplicated': 'Duplicated as new resume',
       'options.profile_deleted': 'Deleted',
-      'options.profile_renamed': 'Renamed'
+      'options.profile_renamed': 'Renamed',
+      'options.import_as_new': "Save as a new resume (don't replace current)"
     }
   };
 
