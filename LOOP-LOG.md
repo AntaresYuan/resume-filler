@@ -69,9 +69,23 @@ Autonomous dev-loop run log. One entry per task completed by Claude Code via the
 
 ---
 
+## 2026-05-12 · PR #29 — Import-as-new-profile flow (no-issue follow-up)
+
+- **Branch:** `feat/import-as-new-profile` (squash-merged as `79a69ee`, branch deleted)
+- **Origin:** user reload-tested v2.3 (PR #27) and hit a gap immediately — pasting a second resume JSON overwrote the first. PR #27 shipped multi-resume *storage* + *manual management* (Duplicate-as-new) but not a multi-resume *import path*. This PR fixes that.
+- **Files:** `popup.html` (+1), `popup.js` (+44/-6), `options.html` (+18), `options.js` (+43/-1), `i18n.js` (+14/-4). Total +109/-11 across 5 files. No new tests — `lib/profiles.js` was untouched, the change is UI wiring.
+- **Surfaces:**
+  - popup: new "导入新简历" footer link sets module-level `importIntent='new'`; existing "重新导入 JSON" stays `'replace'`. Step-2 paste handler branches on intent. Onboarding entries (`step1NextBtn`, `fillBackBtn`) also reset to `'replace'` so the flag can't leak across screen transitions.
+  - options: import modal gets a "作为新简历导入" checkbox; when ticked, `doImport` creates a profile + sets it active + persists immediately. Button label syncs between "导入并覆盖" and "导入为新简历" based on checkbox state.
+- **Both paths re-anchor** active to the newly-created id explicitly after `createProfile` — `createProfile` preserves an already-valid active id by design (for Duplicate-as-new flow), so create-and-switch is a two-call sequence.
+- **Verification:** `npm run lint` clean, `npm test` 278/278, `node -c` parse OK, CI green (21s).
+- **Sub-agent review:** flagged P1 intent leak across `step1NextBtn` / `fillBackBtn` + two nits (misleading `popup.reimport_confirm` copy, static "Import & overwrite" button label even when "as new" ticked). All three fixed in `7086441` before merge.
+
+---
+
 ## 2026-05-12 · Loop complete
 
-**Total shipped in this run:** PR #25 (closes #10), PR #26 (closes #11), PR #27 (closes #14), PR #28 (no-issue, DeepSeek provider preset).
+**Total shipped in this run:** PR #25 (closes #10), PR #26 (closes #11), PR #27 (closes #14), PR #28 (no-issue, DeepSeek provider preset), PR #29 (no-issue, multi-resume import path — fills the gap PR #27 left behind).
 
 **Test count:** 190 → 278 (+88 across label-classifier, validators, profiles, DeepSeek provider, and follow-up cases).
 
